@@ -37,10 +37,10 @@
 <body>
 <header>
   <h1>Portrait variations</h1>
-  <p>The same supplied photograph, the same words and the same word size in all six. The first three use Archivo; the second three use Barlow Condensed. Within each set, only the case and engraving techniques change. Zoom the browser in to check legibility; the portraits re-render sharply.</p>
+  <p>The same supplied photograph, the same words and the same words in all eight. The first three use Archivo; the second three use Barlow Condensed. Within each set, only the case and engraving techniques change. Zoom the browser in to check legibility; the portraits re-render sharply.</p>
 </header>
 
-<nav><a href="#v-a">A · Capitals</a><a href="#v-b">B · Lowercase</a><a href="#v-c">C · Flat</a><a href="#v-d">D · Capitals</a><a href="#v-e">E · Lowercase</a><a href="#v-f">F · Flat</a></nav>
+<nav><a href="#v-a">A · Capitals</a><a href="#v-b">B · Lowercase</a><a href="#v-c">C · Flat</a><a href="#v-d">D · Capitals</a><a href="#v-e">E · Lowercase</a><a href="#v-f">F · Flat</a><a href="#v-g">G · Fine</a><a href="#v-h">H · Fine head</a></nav>
 <div class="grid">
   <figure id="v-a">
     <div class="stage" data-variant="caps"></div>
@@ -65,6 +65,14 @@
   <figure id="v-f">
     <div class="stage" data-variant="barlow-flat"></div>
     <figcaption><b>F · Barlow Condensed, flat</b><span>Straight rows, one weight and one muted ink, with the portrait’s tone carried by lightness alone.</span></figcaption>
+  </figure>
+  <figure id="v-g">
+    <div class="stage" data-variant="fine"></div>
+    <figcaption><b>G · Fine, uniform</b><span>Every word the same small size everywhere (≈4px at this size) in condensed Archivo caps, monochrome warm ink. Maximum detail, no word stands out; read by zooming or tapping.</span></figcaption>
+  </figure>
+  <figure id="v-h">
+    <div class="stage" data-variant="split"></div>
+    <figcaption><b>H · Fine head, uniform body</b><span>The reference's structure without its highlighted words: small words across the whole head, one slightly larger size across the body. Within each area every word is identical.</span></figcaption>
   </figure>
 </div>
 <p class="note">Prototype study · words are drawn from the site's curated vocabulary and demo messages · Visionary Leader ink palette</p>
@@ -133,6 +141,7 @@
   }
   // warm light → cool shadow (Visionary Leader: muted indigo family)
   const warmCool = ramp([[0, '#f3eee6'], [0.1, '#d9c0aa'], [0.3, '#a5877f'], [0.55, '#5c5b8a'], [0.8, '#2e345d'], [1, '#11142a']]);
+  const warmMono = ramp([[0, '#e0d7ca'], [0.12, '#c4b8aa'], [0.38, '#8d8174'], [0.66, '#4a433d'], [1, '#141110']]);
   const flatInk = ramp([[0, '#f3eee6'], [0.1, '#cfcad0'], [1, '#1c2140']]);
 
   // ---------- renderer ----------
@@ -142,8 +151,13 @@
     flat:         { upper: false, engraved: false, font: 'archivo' },
     'barlow-caps':  { upper: true,  engraved: true,  font: 'barlow' },
     'barlow-lower': { upper: false, engraved: true,  font: 'barlow' },
-    'barlow-flat':  { upper: false, engraved: false, font: 'barlow' }
+    'barlow-flat':  { upper: false, engraved: false, font: 'barlow' },
+    // fine, photographic detail with every word the same size: condensed caps, monochrome warm ink
+    fine:  { upper: true, engraved: false, font: 'archivo', fine: true, rows: 190 },
+    // the reference's structure: small words across the whole head, uniform medium words on the body
+    split: { upper: true, engraved: false, font: 'archivo', fine: true, rows: 140, headRows: 200 }
   };
+  const HEAD = (u, v) => { const dx = (u - 0.475) / 0.3, dy = (v - 0.3) / 0.27; return dx * dx + dy * dy < 1; };
   // 0 = highlight, 1 = deep shadow. Highlights keep a floor of light ink so the whole silhouette stays made of words
   const toneOf = l => { const k = Math.min(1, Math.max(0, (0.85 - l) / 0.7)); return 0.06 + 0.94 * k * k * (3 - 2 * k); }; // S-curve: clean highlights, deep features
   const FACE = (u, v) => { const dx = (u - 0.47) / 0.27, dy = (v - 0.31) / 0.27; return dx * dx + dy * dy < 1; };
@@ -158,14 +172,18 @@
       stage.appendChild(c); const x = c.getContext('2d'); x.textBaseline = 'alphabetic'; return { name, c, x };
     });
     const pick = (u, v) => layers.length === 1 ? layers[0] : layers[FACE(u, v) ? 1 : 0];
+    const regions = opt.headRows ? [{ rows: opt.headRows, inside: HEAD }, { rows: opt.rows, inside: (u, v) => !HEAD(u, v) }]
+                                 : [{ rows: opt.rows || 118, inside: () => true }];
+    const R = rng(20261001);
+    layers.forEach(l => { if ('fontStretch' in l.x) l.x.fontStretch = opt.fine ? 'condensed' : 'semi-condensed'; });
+    for (const region of regions) {
 
     // identical row pitch for every variant; lowercase gets a larger body so its x-height matches cap density
-    const lh = H / 118;   // ≈ 7px rows at live size: reads as an image, words legible up close or zoomed
-    const fs = opt.upper ? lh * 1.12 : lh * 1.4;   // tight leading: letters nearly touch row to row, so shadows can go dark
+    const lh = H / region.rows;   // 118 rows ≈ 7px at live size; the fine variants go down to ≈ 4px
+    const fs = opt.fine ? lh * 1.18 : opt.upper ? lh * 1.12 : lh * 1.4;   // tight leading: letters nearly touch row to row, so shadows can go dark
     const track = opt.upper ? fs * 0.02 : 0;
     const space = fs * 0.26;
     const amp = opt.engraved ? lh * 1.6 : 0;             // how far rows bend over the form
-    const R = rng(20261001);
     const widthCache = new Map();
     const adv = (ch, wt) => {
       const k = wt + ch; let v = widthCache.get(k);
@@ -176,7 +194,6 @@
     // 0 = highlight, 1 = deep shadow. Highlights keep a floor of light ink so the whole silhouette stays made of words
     const tone = (x, y) => toneOf(L(x / W, y / H));
 
-    layers.forEach(l => { if ('fontStretch' in l.x) l.x.fontStretch = 'semi-condensed'; });
 
     for (let y0 = -amp; y0 < H + amp; y0 += lh) {
       let x = -R() * fs * 6;
@@ -184,10 +201,10 @@
         let word = words[(R() * words.length) | 0]; word = opt.upper ? word.toUpperCase() : word;
         for (const ch of word) {
           const t0 = tone(x, baseline(x, y0));
-          const wt = opt.engraved ? Math.round((120 + 780 * Math.pow(t0, 0.85)) / 20) * 20 : 600;
+          const wt = opt.engraved ? Math.round((120 + 780 * Math.pow(t0, 0.85)) / 20) * 20 : opt.fine ? Math.round((300 + 500 * t0) / 50) * 50 : 600;
           const a = adv(ch, wt), cx = x + a / 2, cy = baseline(cx, y0);
           const u = cx / W, v = (cy - fs * 0.3) / H;
-          if (u >= 0 && u <= 1 && v >= 0 && v <= 1 && M(u, v) > 0.5) {
+          if (u >= 0 && u <= 1 && v >= 0 && v <= 1 && M(u, v) > 0.5 && region.inside(u, v)) {
             const ctx = pick(u, v).x;
             ctx.font = `${wt} ${fs}px ${font}`;
             ctx.fillStyle = '#000';
@@ -206,8 +223,9 @@
         x += space;
       }
     }
+    }
     // colour every pixel inside the letters from the tone-mapped photo, so detail survives below letter size
-    const paint = colourImage(opt.engraved ? warmCool : flatInk);
+    const paint = colourImage(opt.engraved ? warmCool : opt.fine ? warmMono : flatInk);
     layers.forEach(l => {
       l.x.setTransform(1, 0, 0, 1, 0, 0);
       l.x.globalCompositeOperation = 'source-in';
