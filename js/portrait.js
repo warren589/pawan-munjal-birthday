@@ -168,11 +168,12 @@
       spec.slots.slice(0, 3).forEach(([sx, sy]) => rects.push({ x: sx * W - W * 0.2, y: sy * H - H * 0.035, w: W * 0.4, h: H * 0.07, reserved: true }));
 
       // ---- featured words (greedy placement guided by tone + detail) ----
-      const tiers = spec.tiers || [[3, 0.048, 'serif'], [5, 0.032, 'sans'], [8, 0.024, 'sans'], [14, 0.018, 'sans']];
+      // big → small; the two small tiers add a dense mid-layer of words between the headline words and the fine texture
+      const tiers = spec.tiers || [[3, 0.048, 'serif'], [5, 0.032, 'sans'], [8, 0.024, 'sans'], [14, 0.018, 'sans'], [34, 0.0135, 'sans'], [60, 0.0105, 'sans']];
       const featured = []; let fi = 0; const prot = spec.protect || [];
       for (const [n, rel, style] of tiers) {
         for (let i = 0; i < n && fi < spec.featured.length; i++, fi++) {
-          const item = spec.featured[fi], size = H * rel;
+          const item = spec.featured[fi], size = H * rel, small = rel < 0.015;
           const serif = style === 'serif' && !spec.bold;
           const text = serif ? item.t : item.t.toUpperCase();
           const font = serif ? `italic 600 $ ${SERIF}` : style === 'serif' ? `900 $ ${DISPLAY}` : `700 $ ${TEX_FONT}`;
@@ -180,7 +181,7 @@
           let best = null, bestCost = Infinity;
           for (let k = 0; k < 160; k++) {
             const r = { x: W * 0.04 + R() * (W * 0.92 - w), y: H * 0.04 + R() * (H * 0.92 - h), w, h };
-            if (hits(r, size * 0.25)) continue;
+            if (hits(r, size * (small ? 0.4 : 0.25))) continue;
             let tsum = 0, dsum = 0, tmin = 1;
             for (let a = 0; a < 5; a++) for (let b = 0; b < 3; b++) {
               const px = r.x + w * (a + 0.5) / 5, py = r.y + h * (b + 0.5) / 3, t = tone(px, py);
@@ -188,7 +189,7 @@
             }
             const tm = tsum / 15;
             // glow: big words sit in mid tones; ink: big black words sit on the open paper around him
-            if (spec.ink ? tm > 0.22 : (tmin < 0.035 || tm > 0.62)) continue;
+            if (spec.ink ? tm > 0.22 : (tmin < (small ? 0.02 : 0.035) || tm > 0.62)) continue;
             if (prot.some(([cx, cy, rx, ry]) => {
               const nx = Math.max(Math.abs(r.x + w / 2 - cx * W) - w / 2, 0) / (rx * W), ny = Math.max(Math.abs(r.y + h / 2 - cy * H) - h / 2, 0) / (ry * H);
               return nx * nx + ny * ny < 1;
@@ -221,7 +222,7 @@
           const font = `${weight} $ ${TEX_FONT}`, w = this.measure(word, font) * fs;
           const blk = band.find(q => x < q.x + q.w + gap && x + w + gap > q.x);
           if (blk) { x = blk.x + blk.w + gap * 1.5; continue; }
-          if (t < 0.09 && R() < 0.6) { x += w + gap; continue; } // sparser in the dark
+          if (t < 0.09 && R() < 0.3) { x += w + gap; continue; } // sparser in the dark
           tx.font = font.replace('$', fs + 'px');
           tx.fillText(word, x, y + lh * 0.82);
           items.push(x, w, pick.m, pick.t);

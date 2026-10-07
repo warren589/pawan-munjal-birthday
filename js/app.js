@@ -87,6 +87,8 @@
     order.forEach(i => messages[i].words.forEach(w => (final || facetsOf(w).includes(code)) && pushF(w, i)));
     order.forEach(i => messages[i].words.forEach(w => pushF(w, i)));
     [...VOCAB.values()].filter(v => final || v.facets.has(code)).sort(() => R() - 0.5).forEach(v => pushF(v.w, msgForWord(v.w, code, R)));
+    // then the wider vocabulary, so the small-word layer has enough distinct words
+    [...VOCAB.values()].sort(() => R() - 0.5).forEach(v => pushF(v.w, msgForWord(v.w, code, R)));
     const pool = [];
     mIdx.forEach(i => messages[i].words.forEach(w => { for (let k = 0; k < 3; k++) pool.push({ t: w, m: i }); }));
     VOCAB.forEach(v => {
@@ -98,7 +100,7 @@
       key: (final ? 'final' : 'f' + fi) + (ink ? ':ink' : '') + (bold ? ':b' : ''), ink, bold,
       kind: photo ? (ink ? 'ink' : 'photo') : FACETS[fi].shape,
       stops: final ? window.FINAL_STOPS : ink ? posterStops(FACETS[fi].paper) : FACETS[fi].stops,
-      featured: featured.slice(0, 37), pool, seed: final ? 4242 : 101 + fi * 7, slots: photo ? SLOTS_PHOTO : SLOTS_PH,
+      featured: featured.slice(0, 124), pool, seed: final ? 4242 : 101 + fi * 7, slots: photo ? SLOTS_PHOTO : SLOTS_PH,
       protect: photo ? FACE_PROTECT : []
     });
   }
@@ -154,7 +156,9 @@
     const light = look === 'poster' && !final && s !== 'hero';
     body.classList.toggle('light', light);
     body.style.setProperty('--bgc', light ? FACETS[fi].paper : '#0b0710');
-    $$('button', rail).forEach(b => b.classList.toggle('on', b.dataset.go === (final ? 'final' : String(fi)) && s !== 'hero'));
+    const ai = s === 'hero' ? -1 : final ? 7 : fi;
+    $$('button', rail).forEach((b, i) => { b.classList.toggle('on', i === ai); b.classList.toggle('done', i < ai); });
+    rail.style.setProperty('--p', Math.max(0, ai) / 7);
     $$('.chapter').forEach(c => c.classList.toggle('is-active', c.dataset.state === s));
     portrait.show(buildSpec(s));
   }
