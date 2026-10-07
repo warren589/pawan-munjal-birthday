@@ -534,12 +534,6 @@ body.on-board .rail, body.on-board .findpill { opacity: 0; pointer-events: none;
 .note__by { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; font-size: 14px; }
 .note__by b { display: block; font-weight: 600; }
 .note__by i { display: block; font-style: normal; color: var(--muted); font-size: 13px; }
-.note__love {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px;
-  border: 1.5px solid var(--line); background: none; font: 700 12px/1 var(--sans); transition: .2s;
-}
-.note__love span { font-size: 13px; transition: transform .3s var(--ease); }
-.note__love.on span { transform: scale(1.3); color: var(--nc1); }
 .note__pending { font-style: normal; font-size: 12px; opacity: .75; max-width: 170px; text-align: right; }
 .note--mine { border: 2px dashed var(--nc); }
 .note:hover { transform: translateY(-4px); }
@@ -561,28 +555,12 @@ body[data-look="poster"] .note__text { font: 500 17px/1.4 var(--display); }
 body[data-look="poster"] .note--big .note__text { font: 700 23px/1.25 var(--display); letter-spacing: -.01em; }
 body[data-look="poster"] .note__text mark { background: #111; color: var(--nc); padding: 0 .18em; font-weight: 800; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 body[data-look="poster"] .note__by i { color: rgba(17, 17, 17, .7); }
-body[data-look="poster"] .note__love { border-color: #111; color: #111; }
-body[data-look="poster"] .note__love.on { background: #111; color: var(--nc); }
-body[data-look="poster"] .note__love.on span { color: var(--nc); }
-body[data-look="poster"] .note--mine { outline: 3px dashed #f7efe4; outline-offset: 5px; }
-body[data-look="poster"] .note:hover { transform: translate(-4px, -4px); box-shadow: 6px 6px 0 #f7efe4; }
-
-@media (max-width: 1100px) { .board__grid { column-count: 2; } }
-@media (max-width: 819px), (max-width: 1100px) and (orientation: portrait) {
-  .board { padding: 12vh 16px 8vh; }
-  .board__head { grid-template-columns: 1fr; gap: 18px; margin-bottom: 28px; }
-  .board__tools { flex-direction: column; align-items: stretch; gap: 10px; }
-  .board__filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
-  .board__filters::-webkit-scrollbar { display: none; }
-  .bchip { flex: none; }
-  .board__search input { width: 100%; }
-}
-@media (max-width: 640px) { .board__grid { column-count: 1; } }
+body[data-look="poster"] @media (max-width: 640px) { .board__grid { column-count: 1; } }
 
 /* headline word always fits its card: size from card width and word length */
 .note { container-type: inline-size; }
-body[data-look="poster"] .note__word { font-size: min(50px, calc(100cqi / (var(--len) * 0.74))); }
-body[data-look="poster"] .note--big .note__word { font-size: min(76px, calc(100cqi / (var(--len) * 0.74))); }
+body[data-look="poster"] .note__word { font-size: min(50px, calc(100cqi / (var(--len) * 0.84))); }
+body[data-look="poster"] .note--big .note__word { font-size: min(76px, calc(100cqi / (var(--len) * 0.84))); }
 .note__word { font-size: min(44px, calc(100cqi / (var(--len) * 0.5))); }
 .note--big .note__word { font-size: min(64px, calc(100cqi / (var(--len) * 0.5))); }
 body.on-board .top { background: var(--bgc); }

@@ -384,7 +384,6 @@
   const grid = $('.board__grid'), filters = $('.board__filters'), search = $('.board__search input');
   const PAGE = 12;
   let bFacet = 'all', bQuery = '', bShown = PAGE;
-  const loved = new Set();
   const primaryFacet = m => facetsOf(m.words[0])[0] || [...m.facets][0] || 'J';
   function highlight(m) {
     const ex = extract(m.text), spans = [];
@@ -398,14 +397,13 @@
     const code = m.mine ? [...m.facets][0] : primaryFacet(m), f = FACETS[CODES.indexOf(code)];
     const big = !m.mine && (i % 7 === 0 || m.text.length < 70);
     const no = (2418 + mine - i).toLocaleString('en-IN');
-    const love = 12 + ((i * 37) % 90) + (loved.has(i) ? 1 : 0);
     return `<article class="note${big ? ' note--big' : ''}${m.mine ? ' note--mine' : ''}" style="--nc:${m.mine ? m.color : f.paper};--nc1:${f.c1}">
       <header class="note__top"><span class="note__facet">${m.mine ? 'Your message' : f.short}</span><span class="note__no">${m.mine ? 'Pending approval' : 'No. ' + no}</span></header>
       <p class="note__word" style="--len:${Math.max(6, m.words[0].length)}">${esc(m.words[0])}</p>
       <p class="note__text">“${highlight(m)}”</p>
       <footer class="note__by">
         <span><b>${esc(m.name || 'Anonymous')}</b>${m.rel ? `<i>${esc(m.rel)}</i>` : ''}</span>
-        ${m.mine ? '<em class="note__pending">Only you can see this until it’s approved</em>' : `<button type="button" class="note__love${loved.has(i) ? ' on' : ''}" data-i="${i}" aria-pressed="${loved.has(i)}" aria-label="Appreciate this message"><span>♥</span>${love}</button>`}
+        ${m.mine ? '<em class="note__pending">Only you can see this until it’s approved</em>' : ''}
       </footer>
     </article>`;
   }
@@ -427,10 +425,6 @@
   filters.addEventListener('click', e => { const b = e.target.closest('.bchip'); if (b) boardFilter(b.dataset.f); });
   search.addEventListener('input', () => { bQuery = search.value.trim(); bShown = PAGE; renderBoard(); });
   $('.js-more').addEventListener('click', () => { bShown += PAGE; renderBoard(); });
-  grid.addEventListener('click', e => {
-    const b = e.target.closest('.note__love'); if (!b) return;
-    const i = +b.dataset.i; loved.has(i) ? loved.delete(i) : loved.add(i); renderBoard();
-  });
   renderBoard();
 
   // ---------------- Boot ----------------
