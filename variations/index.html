@@ -10,7 +10,7 @@
 <title>Portrait Variations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Barlow+Condensed:wght@100..900&family=IBM+Plex+Sans+Condensed:wght@100;200;300;400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Barlow+Condensed:wght@100..900&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
 <style>
   :root { --paper: #f3eee6; --ink: #1c2036; --muted: #6f6a72; --line: rgba(28, 32, 54, .14); }
   * { box-sizing: border-box; }
@@ -31,10 +31,6 @@
   @media (max-width: 800px) { figure { flex-direction: column; gap: 16px; } .stage { height: auto; width: 100%; } figcaption { max-width: none; } }
   figcaption b { display: block; font: 600 12px/1.2 "Archivo", sans-serif; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 4px; }
   figcaption span { color: var(--muted); font-size: 15px; }
-  .comparison-section { margin-top: 64px; border-top: 1px solid var(--line); }
-  .comparison-section__head { max-width: 1400px; margin: 0 auto; padding: 72px 24px 8px; }
-  .comparison-section__head h2 { font: 500 30px/1.1 "Newsreader", Georgia, serif; margin: 0 0 8px; letter-spacing: -.01em; }
-  .comparison-section__head p { max-width: 680px; margin: 0; color: var(--muted); }
   .note { max-width: 1680px; margin: 0 auto; padding: 0 24px 48px; color: var(--muted); font-size: 14px; }
 </style>
 </head>
@@ -71,26 +67,6 @@
     <figcaption><b>F · Barlow Condensed, flat</b><span>Straight rows, one weight and one muted ink, with the portrait’s tone carried by lightness alone.</span></figcaption>
   </figure>
 </div>
-<section class="comparison-section" aria-labelledby="plex-title">
-  <div class="comparison-section__head">
-    <h2 id="plex-title">IBM Plex Sans Condensed</h2>
-    <p>Three controlled typography studies using the same portrait, vocabulary, dimensions and crop as the existing variations. The tonal studies use the supplied high-resolution photograph to preserve jacket, lapel, shirt and pocket-square detail.</p>
-  </div>
-  <div class="grid">
-    <figure id="plex-a">
-      <div class="stage plex-stage" data-plex-variant="flat"></div>
-      <figcaption><b>A · IBM Plex Sans Condensed / Flat</b><span>A direct font comparison: horizontal, tightly packed words in a single neutral ink, with the existing portrait construction retained.</span></figcaption>
-    </figure>
-    <figure id="plex-b">
-      <div class="stage plex-stage" data-plex-variant="tonal"></div>
-      <figcaption><b>B · IBM Plex Sans Condensed / Tonal</b><span>High-resolution luminance and local contours control word density and strength, retaining definition through the hair, face, jacket, lapels, shirt and pocket square.</span></figcaption>
-    </figure>
-    <figure id="plex-c">
-      <div class="stage plex-stage" data-plex-variant="cobalt"></div>
-      <figcaption><b>C · IBM Plex Sans Condensed / Tonal + Cobalt</b><span>The tonal treatment from B with selective cobalt accent on contours and a few prominent vocabulary words; most of the portrait remains dark neutral.</span></figcaption>
-    </figure>
-  </div>
-</section>
 <p class="note">Prototype study · words are drawn from the site's curated vocabulary and demo messages · Visionary Leader ink palette</p>
 
 <script src="portrait-src.js"></script>
@@ -104,8 +80,7 @@
   const PAPER = [243, 238, 230];
   const FONTS = {
     archivo: '"Archivo", "Arial Narrow", sans-serif',
-    barlow: '"Barlow Condensed", "Arial Narrow", sans-serif',
-    plex: '"IBM Plex Sans Condensed", "Arial Narrow", sans-serif'
+    barlow: '"Barlow Condensed", "Arial Narrow", sans-serif'
   };
 
   // ---------- image sources ----------
@@ -115,13 +90,6 @@
     const x = c.getContext('2d'); x.drawImage(img, 0, 0);
     const d = x.getImageData(0, 0, c.width, c.height).data, out = new Float32Array(c.width * c.height);
     for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
-    return { w: c.width, h: c.height, d: out };
-  }
-  function luminancePixels(img) {
-    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-    const x = c.getContext('2d'); x.drawImage(img, 0, 0);
-    const d = x.getImageData(0, 0, c.width, c.height).data, out = new Float32Array(c.width * c.height);
-    for (let i = 0; i < out.length; i++) out[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
     return { w: c.width, h: c.height, d: out };
   }
   // separable box blur, three passes ≈ gaussian; used for the "form" field the rows bend over
@@ -143,12 +111,10 @@
 
   await Promise.race([Promise.all([
     document.fonts.load('400 20px "Archivo"'), document.fonts.load('800 20px "Archivo"'), document.fonts.load('200 20px "Archivo"'),
-    document.fonts.load('400 20px "Barlow Condensed"'), document.fonts.load('800 20px "Barlow Condensed"'), document.fonts.load('200 20px "Barlow Condensed"'),
-    document.fonts.load('400 20px "IBM Plex Sans Condensed"'), document.fonts.load('700 20px "IBM Plex Sans Condensed"')
+    document.fonts.load('400 20px "Barlow Condensed"'), document.fonts.load('800 20px "Barlow Condensed"'), document.fonts.load('200 20px "Barlow Condensed"')
   ]), new Promise(r => setTimeout(r, 3000))]);
   const lumF = pixels(await load(window.PM_LUM)), maskF = pixels(await load(window.PM_MASK));
-  const sourceF = luminancePixels(await load('../assets/pawan-munjal.jpg'));
-  const L = sampler(lumF), M = sampler(maskF), F = sampler(blur(lumF, 26)), SOURCE = sampler(sourceF);
+  const L = sampler(lumF), M = sampler(maskF), F = sampler(blur(lumF, 26));
 
   // ---------- words ----------
   const words = window.VOCAB_RAW.map(s => s.split('|')[0].split(',')[0]);
@@ -261,113 +227,11 @@
     x.putImageData(id, 0, 0); paintCache.set(rampFn, c); return c;
   }
 
-  const stages = [...document.querySelectorAll('.stage:not(.plex-stage)')];
+  const stages = [...document.querySelectorAll('.stage')];
   stages.forEach(render);
 
-  // ---------- IBM Plex Sans Condensed comparison ----------
-  // The source photograph is 1333 × 2000 (rather than the 800 × 1200 prepared map
-  // used above). Its local luminance differences drive the two tonal studies.
-  const clamp = n => Math.min(1, Math.max(0, n));
-  const PLEX_COBALT_WORDS = new Set(['visionary', 'leadership', 'courage', 'legacy', 'inspiration', 'future']);
-  const fractional = n => n - Math.floor(n);
-  function tonalData(u, v) {
-    const light = SOURCE(u, v);
-    const rx = 0.003, ry = 0.002;
-    const left = SOURCE(u - rx, v), right = SOURCE(u + rx, v), up = SOURCE(u, v - ry), down = SOURCE(u, v + ry);
-    const broad = (SOURCE(u - 0.014, v) + SOURCE(u + 0.014, v) + SOURCE(u, v - 0.010) + SOURCE(u, v + 0.010)) * 0.25;
-    const edge = clamp((Math.abs(right - left) + Math.abs(down - up)) * 5.2);
-    const detail = clamp(Math.abs(light - broad) * 4.2);
-    // Keep deep suit areas strong without letting them collapse into a uniform block.
-    const shadow = clamp((0.72 - light) / 0.72);
-    return { strength: clamp(0.04 + shadow * 0.62 + edge * 0.32 + detail * 0.20), edge };
-  }
-  let plexTonePaint;
-  function getPlexTonePaint() {
-    if (plexTonePaint) return plexTonePaint;
-    const paint = document.createElement('canvas'); paint.width = sourceF.w; paint.height = sourceF.h;
-    const paintCtx = paint.getContext('2d'), image = paintCtx.createImageData(paint.width, paint.height);
-    for (let i = 0; i < sourceF.d.length; i++) {
-      const light = clamp((sourceF.d[i] - 0.04) / 0.76);
-      const value = Math.round(24 + Math.pow(light, 0.9) * 154);
-      image.data[i * 4] = value; image.data[i * 4 + 1] = value + 4; image.data[i * 4 + 2] = value + 18; image.data[i * 4 + 3] = 255;
-    }
-    paintCtx.putImageData(image, 0, 0); plexTonePaint = paint; return paint;
-  }
-  function renderPlex(stage) {
-    const mode = stage.dataset.plexVariant;
-    const W = stage.clientWidth, H = stage.clientHeight, dpr = Math.min(3, window.devicePixelRatio || 1);
-    stage.innerHTML = '';
-    const c = document.createElement('canvas'); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); c.dataset.layer = mode;
-    stage.appendChild(c);
-    const ctx = c.getContext('2d'); ctx.textBaseline = 'alphabetic';
-    const accent = mode === 'cobalt' ? document.createElement('canvas') : null;
-    const accentCtx = accent && accent.getContext('2d');
-    if (accent) { accent.width = c.width; accent.height = c.height; accent.dataset.layer = 'cobalt-accent'; stage.appendChild(accent); accentCtx.textBaseline = 'alphabetic'; }
-    const lh = H / 118, fs = lh * 1.4, space = fs * 0.26;
-    const R = rng(mode === 'flat' ? 20261001 : 20261019);
-    const widthCache = new Map();
-    const advance = (ch, weight) => {
-      const key = weight + ch; let width = widthCache.get(key);
-      if (width === undefined) { ctx.font = `${weight} ${fs}px ${FONTS.plex}`; width = ctx.measureText(ch).width; widthCache.set(key, width); }
-      return width;
-    };
-    for (let y = 0; y < H + fs; y += lh) {
-      let x = -R() * fs * 6;
-      while (x < W) {
-        const word = words[(R() * words.length) | 0];
-        let weight = 600;
-        let widths = [...word].map(ch => advance(ch, weight));
-        let wordWidth = widths.reduce((sum, width) => sum + width, 0);
-        let cx = x + wordWidth / 2, u = cx / W, v = (y - fs * 0.3) / H;
-        const tonal = mode === 'flat' ? null : tonalData(u, v);
-        if (tonal) {
-          weight = Math.round((400 + tonal.strength * 280) / 20) * 20;
-          widths = [...word].map(ch => advance(ch, weight));
-          wordWidth = widths.reduce((sum, width) => sum + width, 0);
-          cx = x + wordWidth / 2; u = cx / W;
-        }
-        const inside = u >= 0 && u <= 1 && v >= 0 && v <= 1 && M(u, v) > 0.5;
-        const density = tonal ? 0.12 + tonal.strength * 0.88 : 1;
-        if (inside && R() <= density) {
-          const prominent = PLEX_COBALT_WORDS.has(word);
-          ctx.font = `${weight} ${fs}px ${FONTS.plex}`;
-          let letterX = x;
-          for (let i = 0; i < word.length; i++) {
-            const letterU = (letterX + widths[i] / 2) / W;
-            if (letterU >= 0 && letterU <= 1 && M(letterU, v) > 0.5) {
-              // Per-letter sampling retains fine detail while each word remains level and readable.
-              const letterTonal = mode === 'flat' ? null : tonalData(letterU, v);
-              const marker = fractional(Math.sin(letterX * 12.9898 + y * 78.233) * 43758.5453);
-              const cobalt = mode === 'cobalt' && ((letterTonal.edge > 0.22 && marker < 0.20) || (prominent && letterTonal.strength > 0.50 && marker < 0.38));
-              const neutral = letterTonal ? Math.round(170 - letterTonal.strength * 148) : 0;
-              const colour = mode === 'flat' ? flatInk(toneOf(L(letterU, v))) : [neutral, neutral + 4, neutral + 20];
-              ctx.fillStyle = mode === 'flat' ? `rgb(${colour.join(',')})` : '#000';
-              ctx.globalAlpha = letterTonal ? 0.45 + letterTonal.strength * 0.55 : 1;
-              ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-              ctx.fillText(word[i], letterX, y);
-              if (cobalt) {
-                accentCtx.fillStyle = '#2563eb'; accentCtx.globalAlpha = 0.58 + letterTonal.strength * 0.42;
-                accentCtx.setTransform(dpr, 0, 0, dpr, 0, 0); accentCtx.fillText(word[i], letterX, y);
-              }
-            }
-            letterX += widths[i];
-          }
-        }
-        x += wordWidth + space;
-      }
-    }
-    if (mode !== 'flat') {
-      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-in';
-      ctx.drawImage(getPlexTonePaint(), 0, 0, c.width, c.height); ctx.globalCompositeOperation = 'source-over';
-    }
-    ctx.globalAlpha = 1;
-    if (accentCtx) accentCtx.globalAlpha = 1;
-  }
-  const plexStages = [...document.querySelectorAll('.plex-stage')];
-  plexStages.forEach(renderPlex);
-
   let t, lastDpr = devicePixelRatio;
-  addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { stages.forEach(render); plexStages.forEach(renderPlex); lastDpr = devicePixelRatio; }, 200); });
+  addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { stages.forEach(render); lastDpr = devicePixelRatio; }, 200); });
 })();
 </script>
 </body>
