@@ -200,7 +200,7 @@
           if (!best) continue;
           rects.push(best.r);
           featured.push({
-            t: item.t, m: item.m, text, font, size, x: best.r.x, y: best.r.y + h, w, h: h,
+            baked: small, t: item.t, m: item.m, text, font, size, x: best.r.x, y: best.r.y + h, w, h: h,
             col: spec.ink ? [17, 12, 14] : lutColor(lut, Math.min(1, 0.3 + 1.05 * best.tm))
           });
         }
@@ -241,8 +241,14 @@
       const gy = tx.createLinearGradient(0, 0, 0, tex.height);
       gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.06, '#000'); gy.addColorStop(0.93, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)');
       tx.fillStyle = gy; tx.fillRect(0, 0, tex.width, tex.height);
+      // small featured words are baked into the cached texture (they crossfade with it instead of tweening)
+      tx.globalCompositeOperation = 'source-over'; tx.setTransform(dpr, 0, 0, dpr, 0, 0); tx.textBaseline = 'alphabetic';
+      for (const f of featured) if (f.baked) {
+        tx.font = f.font.replace('$', f.size + 'px'); tx.fillStyle = `rgb(${f.col[0]},${f.col[1]},${f.col[2]})`; tx.fillText(f.text, f.x, f.y);
+      }
+      tx.setTransform(1, 0, 0, 1, 0, 0);
 
-      const out = { key: spec.key, tex, rows, lh, fs, featured, slots: spec.slots, lut, ink: !!spec.ink, bold: !!spec.bold };
+      const out = { key: spec.key, tex, rows, lh, fs, featured, live: featured.filter(f => !f.baked), slots: spec.slots, lut, ink: !!spec.ink, bold: !!spec.bold };
       this.cache.set(spec.key, out);
       while (this.cache.size > 10) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -311,7 +317,7 @@
 
       // featured words tween between states
       ctx.textBaseline = 'alphabetic';
-      const prevMap = new Map(); if (prev && raw < 1) prev.featured.forEach(f => prevMap.set(f.t, f));
+      const prevMap = new Map(); if (prev && raw < 1) prev.live.forEach(f => prevMap.set(f.t, f));
       const draw = (f, x, y, size, col, a) => {
         if (a <= 0.01) return;
         ctx.globalAlpha = a * (1 - 0.82 * this.find);
@@ -319,7 +325,7 @@
         ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
         ctx.fillText(f.text, x, y);
       };
-      for (const f of cur.featured) {
+      for (const f of cur.live) {
         const o = prevMap.get(f.t);
         if (o) { prevMap.delete(f.t); draw(f, lerp(o.x, f.x, p), lerp(o.y, f.y, p), lerp(o.size, f.size, p), o.col.map((c, i) => lerp(c, f.col[i], p)), 1); }
         else draw(f, f.x, f.y, f.size, f.col, prev && raw < 1 ? p : 1);
