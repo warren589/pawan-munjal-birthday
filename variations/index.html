@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Relative paths below need a trailing slash: hosts like Vercel may serve this page as /variations
+  if (location.protocol !== 'file:' && !/\/$|\.html$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+</script>
 <title>Portrait Variations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,6 +61,10 @@
 <script src="../js/data.js"></script>
 <script>
 (async function () {
+  if (!window.PM_LUM || !window.VOCAB_RAW) {
+    document.querySelectorAll('.stage').forEach(st => { st.innerHTML = '<p style="padding:24px;color:#a33">Portrait data failed to load (portrait-src.js or ../js/data.js). Check the page URL ends in /variations/.</p>'; });
+    return;
+  }
   const PAPER = [243, 238, 230];
   const FONT = '"Archivo", "Arial Narrow", sans-serif';
 
