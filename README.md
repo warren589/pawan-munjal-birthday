@@ -10,3 +10,7 @@ A frontend-only prototype of the birthday tribute for Dr. Pawan Munjal. It uses 
 - `js/app.js` handles the scroll story, the composer, deterministic three-word extraction (no AI), the contribution animation, the word sheet, and Find my words.
 
 Facets 02–07 use abstract placeholder compositions until client photography is supplied.
+
+**Two visual directions** can be switched with the *Look* toggle in the header, or with `?look=poster` / `?look=glow`:
+- **Poster** (default) puts each facet on a flat full-bleed colour taken from the earlier pawanmunjal.life site, with the portrait in ink words and heavy uppercase titles. The hero and finale stay dark.
+- **Glow** keeps everything dark, with a luminous colour-mapped portrait.

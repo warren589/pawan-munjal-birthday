@@ -25,6 +25,7 @@
     for (const t of tries) if (ALIAS.has(t)) return ALIAS.get(t);
     return null;
   }
+  const usedWords = new Set();
   function extract(text) {
     const found = new Map(), re = /[A-Za-z’']+/g; let m, i = 0;
     while ((m = re.exec(text))) {
@@ -39,7 +40,9 @@
       (b.count * 3 + VOCAB.get(b.w).facets.size * 0.6 + (b.w.length > 6 ? 0.5 : 0) - b.first * 0.01) -
       (a.count * 3 + VOCAB.get(a.w).facets.size * 0.6 + (a.w.length > 6 ? 0.5 : 0) - a.first * 0.01));
     const words = ranked.slice(0, 3).map(r => r.w), fallback = new Set();
-    for (const fb of window.FALLBACK_WORDS) { if (words.length >= 3) break; if (!words.includes(fb)) { words.push(fb); fallback.add(fb); } }
+    // prefer fallback words this visitor hasn't already placed, so repeat visits don't stack duplicates
+    const fbs = [...window.FALLBACK_WORDS.filter(f => !usedWords.has(f)), ...window.FALLBACK_WORDS];
+    for (const fb of fbs) { if (words.length >= 3) break; if (!words.includes(fb)) { words.push(fb); fallback.add(fb); } }
     return { words, ranked, fallback };
   }
   const facetsOf = (w, fallback) => (fallback && fallback.has(w)) ? ['J'] : [...(VOCAB.get(w)?.facets || ['J'])];
@@ -59,14 +62,21 @@
   function seeded(seed) { let a = seed; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; }
 
   // ---------------- Portrait specs per state ----------------
-  const SLOTS_PHOTO = [[0.5, 0.115], [0.37, 0.665], [0.71, 0.79], [0.83, 0.56], [0.3, 0.9], [0.63, 0.94]];
-  const SLOTS_PH = [[0.5, 0.13], [0.32, 0.56], [0.68, 0.74], [0.5, 0.9], [0.27, 0.32], [0.73, 0.4]];
+  // visitor word positions (normalised), spaced so neighbouring words never overlap
+  const SLOTS_PHOTO = [[0.5, 0.115], [0.37, 0.665], [0.72, 0.8], [0.82, 0.585], [0.28, 0.87], [0.72, 0.935], [0.2, 0.6], [0.55, 0.735], [0.88, 0.7]];
+  const SLOTS_PH = [[0.5, 0.13], [0.32, 0.56], [0.68, 0.74], [0.5, 0.9], [0.27, 0.32], [0.73, 0.4], [0.7, 0.22], [0.3, 0.66], [0.7, 0.58], [0.3, 0.8]];
+  // "poster" = flat colour fields + ink words (closer to the earlier site); "glow" = dark + luminous
+  let look = new URLSearchParams(location.search).get('look') === 'glow' ? 'glow' : 'poster';
+  const shade = (hex, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+  const posterStops = paper => [paper, shade(paper, 0.72), shade(paper, 0.32), '#0d0a0b', '#000000'];
   // face, beard and hair stay pure texture so the likeness reads
   const FACE_PROTECT = [[0.46, 0.33, 0.27, 0.25], [0.46, 0.1, 0.24, 0.07]];
   const specs = {};
   function buildSpec(state) {
-    if (specs[state]) return specs[state];
     const final = state === 'final', fi = final ? -1 : (state === 'hero' ? 0 : +state);
+    const ink = look === 'poster' && state !== 'hero' && !final;
+    const sk = state + (ink ? ':ink' : '');
+    if (specs[sk]) return specs[sk];
     const code = final ? null : CODES[fi], R = seeded(final ? 999 : 17 + fi * 31);
     const mIdx = final ? messages.map((m, i) => i) : msgsFor(code);
     const featured = [], seen = new Set();
@@ -83,9 +93,10 @@
       for (let k = 0; k < n; k++) pool.push({ t: v.w, m: msgForWord(v.w, code, R) });
     });
     const photo = final || fi === 0;
-    return (specs[state] = {
-      key: final ? 'final' : 'f' + fi, kind: photo ? 'photo' : FACETS[fi].shape,
-      stops: final ? window.FINAL_STOPS : FACETS[fi].stops,
+    return (specs[sk] = {
+      key: (final ? 'final' : 'f' + fi) + (ink ? ':ink' : ''), ink,
+      kind: photo ? (ink ? 'ink' : 'photo') : FACETS[fi].shape,
+      stops: final ? window.FINAL_STOPS : ink ? posterStops(FACETS[fi].paper) : FACETS[fi].stops,
       featured: featured.slice(0, 37), pool, seed: final ? 4242 : 101 + fi * 7, slots: photo ? SLOTS_PHOTO : SLOTS_PH,
       protect: photo ? FACE_PROTECT : []
     });
@@ -125,11 +136,12 @@
   // ---------------- Portrait + geometry ----------------
   const canvas = $('.portrait'), pbox = $('.pbox'), portrait = new window.Portrait(canvas);
   let state = null;
+  const MOBILE_MQ = window.matchMedia('(max-width: 819px), (max-width: 1100px) and (orientation: portrait)');
   function geometry() {
-    const vw = window.innerWidth, vh = window.innerHeight, mobile = vw < 820;
+    const vw = window.innerWidth, vh = window.innerHeight, mobile = MOBILE_MQ.matches;
     let bh, bw;
     if (!mobile) { bh = vh * 0.92; bw = bh * 2 / 3; if (bw > vw * 0.48) { bw = vw * 0.48; bh = bw * 1.5; } }
-    else { bw = vw; bh = bw * 1.5; if (bh > vh * 0.68) { bh = vh * 0.68; bw = bh / 1.5; } }
+    else { const k = vh < 720 ? 0.6 : 0.68; bw = vw; bh = bw * 1.5; if (bh > vh * k) { bh = vh * k; bw = bh / 1.5; } }
     bw = Math.round(bw); bh = Math.round(bh);
     pbox.style.width = bw + 'px'; pbox.style.height = bh + 'px';
     body.classList.toggle('is-mobile', mobile);
@@ -144,6 +156,9 @@
     body.dataset.ph = (!final && fi > 0) ? '1' : '0';
     const f = final ? { c1: '#ff2e88', c2: '#ffd23f' } : FACETS[fi];
     body.style.setProperty('--c1', f.c1); body.style.setProperty('--c2', f.c2);
+    const light = look === 'poster' && !final && s !== 'hero';
+    body.classList.toggle('light', light);
+    body.style.setProperty('--bgc', light ? FACETS[fi].paper : '#0b0710');
     $$('button', rail).forEach(b => b.classList.toggle('on', b.dataset.go === (final ? 'final' : String(fi)) && s !== 'hero'));
     $$('.chapter').forEach(c => c.classList.toggle('is-active', c.dataset.state === s));
     portrait.show(buildSpec(s));
@@ -159,7 +174,21 @@
   }
   let ticking = false;
   window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { ticking = false; onScroll(); }); } }, { passive: true });
-  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (geometry() && state) { const s = state; state = null; portrait.cur = null; setState(s); } }, 180); });
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (geometry() && state) relayout(); }, 180); });
+
+  // Render every state's portrait in the background, one per idle slot, so scrolling never waits on layout.
+  let warmGen = 0;
+  function warmAll() {
+    const gen = ++warmGen, queue = ['1', '2', '3', '4', '5', '6', 'final', '0', 'hero'];
+    const idle = window.requestIdleCallback || (cb => setTimeout(cb, 60));
+    const step = () => {
+      if (gen !== warmGen || !queue.length) return;
+      try { portrait.layout(buildSpec(queue.shift())); } catch (e) { /* keep going */ }
+      idle(step, { timeout: 400 });
+    };
+    idle(step, { timeout: 400 });
+  }
+  function relayout() { const s = state; state = null; portrait.cur = null; setState(s); warmAll(); }
 
   const goTo = id => { const el = id === 'final' ? $('#final') : $('#facet-' + id); el && el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) goTo(g.dataset.go); });
@@ -204,8 +233,9 @@
     if (e.target.closest('.js-close-sheet, .sheet__backdrop')) hide(sheet);
   });
 
-  function show(el) { el.hidden = false; requestAnimationFrame(() => el.classList.add('open')); body.classList.add('locked'); }
-  function hide(el) { el.classList.remove('open'); setTimeout(() => { el.hidden = true; }, 380); if (!$$('.composer.open, .sheet.open').length) body.classList.remove('locked'); }
+  // each overlay keeps its own close timer, so reopening quickly can't be undone by a stale close
+  function show(el) { clearTimeout(el._t); el.hidden = false; requestAnimationFrame(() => el.classList.add('open')); body.classList.add('locked'); }
+  function hide(el) { el.classList.remove('open'); clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 380); if (!$$('.composer.open, .sheet.open').length) body.classList.remove('locked'); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (sheet.classList.contains('open')) hide(sheet); else if (composer.classList.contains('open')) hide(composer); } });
 
   // ---------------- Composer ----------------
@@ -281,6 +311,7 @@
     const d = draft, words = d.words.slice();
     const m = { text: d.text, name: d.name, rel: d.rel, words, color: d.color, mine: true, pending: true, facets: new Set(words.flatMap(w => facetsOf(w, d.fallback))) };
     messages.push(m); const mi = messages.length - 1;
+    words.forEach(w => usedWords.add(w));
     const rect = canvas.getBoundingClientRect(), sc = rect.width / portrait.W;
     const base = portrait.user.length;
     composer.classList.add('flying');
@@ -311,10 +342,28 @@
     mine++;
     const cnt = $('.js-count'); cnt.textContent = (2418 + mine).toLocaleString('en-IN');
     const toast = $('.toast'); toast.hidden = false; body.classList.add('toasting'); requestAnimationFrame(() => toast.classList.add('open'));
-    clearTimeout(toast._t); toast._t = setTimeout(() => hideToast(), 9000);
+    clearTimeout(toast._t); toast._t = setTimeout(() => hideToast(), 7000);
+    toast._y = window.scrollY;
     $('.findpill').hidden = false; $('.js-find-inline').hidden = false;
   }
-  function hideToast() { body.classList.remove('toasting'); const t = $('.toast'); t.classList.remove('open'); setTimeout(() => { t.hidden = true; }, 400); }
+  function hideToast() {
+    const t = $('.toast'); if (!t.classList.contains('open')) return;
+    body.classList.remove('toasting'); t.classList.remove('open');
+    clearTimeout(t._t); t._t = setTimeout(() => { t.hidden = true; }, 400);
+  }
+  // the toast gets out of the way as soon as the visitor scrolls on
+  window.addEventListener('scroll', () => { const t = $('.toast'); if (t.classList.contains('open') && Math.abs(window.scrollY - t._y) > 160) hideToast(); }, { passive: true });
+
+  // ---------------- Look toggle (for design review) ----------------
+  function setLook(l) {
+    look = l; body.dataset.look = l;
+    $$('.look button').forEach(b => b.setAttribute('aria-pressed', b.dataset.look === l));
+    const u = new URL(location.href); u.searchParams.set('look', l); history.replaceState(null, '', u);
+    if (state) relayout();
+  }
+  $$('.look button').forEach(b => b.addEventListener('click', () => setLook(b.dataset.look)));
+  body.dataset.look = look;
+  $$('.look button').forEach(b => b.setAttribute('aria-pressed', b.dataset.look === look));
 
   // ---------------- Find my words ----------------
   let finding = false;
@@ -333,15 +382,14 @@
     const fonts = Promise.all([
       document.fonts.load('700 20px "Barlow Condensed"'), document.fonts.load('500 20px "Barlow Condensed"'),
       document.fonts.load('400 20px "Barlow Condensed"'), document.fonts.load('italic 600 20px "Fraunces"'),
-      document.fonts.load('italic 700 20px "Fraunces"')
+      document.fonts.load('italic 700 20px "Fraunces"'), document.fonts.load('900 20px "Archivo"')
     ]).catch(() => {});
     await Promise.race([fonts, new Promise(r => setTimeout(r, 2500))]);
-    await portrait.init(window.PORTRAIT_TONE);
+    await portrait.init(window.PORTRAIT_TONE, window.PORTRAIT_INK);
     geometry();
     state = null; onScroll(); if (!state) setState('hero');
     body.classList.add('ready');
-    // warm the next state in the background
-    setTimeout(() => { try { portrait.layout(buildSpec('1')); } catch (e) {} }, 1200);
+    setTimeout(warmAll, 600);
   }
   boot();
 })();

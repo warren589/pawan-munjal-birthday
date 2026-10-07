@@ -21,10 +21,10 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-  function buildLUT(stops) {
+  function buildLUT(stops, gamma = 1.2) {
     const cols = stops.map(hexRgb), lut = new Uint8ClampedArray(256 * 3);
     for (let i = 0; i < 256; i++) {
-      const v = Math.pow(i / 255, 1.2) * (cols.length - 1);
+      const v = Math.pow(i / 255, gamma) * (cols.length - 1);
       const k = Math.min(cols.length - 2, Math.floor(v)), f = v - k;
       for (let c = 0; c < 3; c++) lut[i * 3 + c] = lerp(cols[k][c], cols[k + 1][c], f);
     }
@@ -132,11 +132,13 @@
       this._loop = this._loop.bind(this);
     }
 
-    async init(photoSrc) { this.sources.photo = await loadPhotoSource(photoSrc); }
+    async init(photoSrc, inkSrc) {
+      [this.sources.photo, this.sources.ink] = await Promise.all([loadPhotoSource(photoSrc), loadPhotoSource(inkSrc)]);
+    }
     source(kind) { return this.sources[kind] || (this.sources[kind] = shapeSource(kind)); }
 
     resize(w, h) {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, w < 500 ? 1.5 : 2); // keep phone memory in check
       if (this.W === w && this.H === h && this.dpr === dpr) return false;
       this.W = w; this.H = h; this.dpr = dpr;
       this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
@@ -155,7 +157,7 @@
     // spec: { key, kind, stops, pool:[{t,m}], featured:[{t,m}], seed, slots }
     layout(spec) {
       if (this.cache.has(spec.key)) { const v = this.cache.get(spec.key); this.cache.delete(spec.key); this.cache.set(spec.key, v); return v; }
-      const { W, H, dpr } = this, R = rng(spec.seed), src = this.source(spec.kind), lut = buildLUT(spec.stops);
+      const { W, H, dpr } = this, R = rng(spec.seed), src = this.source(spec.kind), lut = buildLUT(spec.stops, spec.ink ? 0.85 : 1.2);
       const tone = (x, y) => src.gray[Math.min(GH - 1, Math.max(0, Math.floor(y / H * GH))) * GW + Math.min(GW - 1, Math.max(0, Math.floor(x / W * GW)))];
       const det = (x, y) => src.det[Math.min(src.DH - 1, Math.max(0, Math.floor(y / H * src.DH))) * src.DW + Math.min(src.DW - 1, Math.max(0, Math.floor(x / W * src.DW)))];
       const rects = [];
@@ -183,19 +185,20 @@
               tsum += t; tmin = Math.min(tmin, t); dsum += det(px, py);
             }
             const tm = tsum / 15;
-            if (tmin < 0.035 || tm > 0.62) continue;
+            // glow: big words sit in mid tones; ink: big black words sit on the open paper around him
+            if (spec.ink ? tm > 0.22 : (tmin < 0.035 || tm > 0.62)) continue;
             if (prot.some(([cx, cy, rx, ry]) => {
               const nx = Math.max(Math.abs(r.x + w / 2 - cx * W) - w / 2, 0) / (rx * W), ny = Math.max(Math.abs(r.y + h / 2 - cy * H) - h / 2, 0) / (ry * H);
               return nx * nx + ny * ny < 1;
             })) continue;
-            const cost = dsum * 2.5 + Math.abs(tm - 0.3) * 1.0 + R() * 0.35;
+            const cost = dsum * 2.5 + Math.abs(tm - (spec.ink ? 0.06 : 0.3)) * 1.0 + R() * 0.35;
             if (cost < bestCost) { bestCost = cost; best = { r, tm }; }
           }
           if (!best) continue;
           rects.push(best.r);
           featured.push({
             t: item.t, m: item.m, text, font, size, x: best.r.x, y: best.r.y + h, w, h: h,
-            col: lutColor(lut, Math.min(1, 0.3 + 1.05 * best.tm))
+            col: spec.ink ? [17, 12, 14] : lutColor(lut, Math.min(1, 0.3 + 1.05 * best.tm))
           });
         }
       }
@@ -236,9 +239,9 @@
       gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.06, '#000'); gy.addColorStop(0.93, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)');
       tx.fillStyle = gy; tx.fillRect(0, 0, tex.width, tex.height);
 
-      const out = { key: spec.key, tex, rows, lh, fs, featured, slots: spec.slots, lut };
+      const out = { key: spec.key, tex, rows, lh, fs, featured, slots: spec.slots, lut, ink: !!spec.ink };
       this.cache.set(spec.key, out);
-      while (this.cache.size > 4) this.cache.delete(this.cache.keys().next().value);
+      while (this.cache.size > 10) this.cache.delete(this.cache.keys().next().value);
       return out;
     }
 
@@ -250,8 +253,10 @@
       this.kick();
     }
 
+    // only the latest two contributions stay emphasised, so the portrait never fills up with stickers
+    visibleUser() { const n = this.cur ? Math.min(6, this.cur.slots.length) : 0; return this.user.slice(-n); }
     userTarget(i) {
-      const s = this.cur.slots[i % this.cur.slots.length];
+      const s = this.cur.slots[i % Math.min(6, this.cur.slots.length)];
       return { x: s[0] * this.W, y: s[1] * this.H, size: this.H * 0.05 };
     }
 
@@ -266,7 +271,7 @@
 
     hit(px, py) {
       const L = this.cur; if (!L) return null;
-      for (const u of this.user) if (u.box && px >= u.box.x && px <= u.box.x + u.box.w && py >= u.box.y && py <= u.box.y + u.box.h) return { t: u.t, m: u.m, box: u.box, mine: true };
+      for (const u of this.visibleUser()) if (u.box && px >= u.box.x && px <= u.box.x + u.box.w && py >= u.box.y && py <= u.box.y + u.box.h) return { t: u.t, m: u.m, box: u.box, mine: true };
       for (const f of L.featured) if (px >= f.x - 4 && px <= f.x + f.w + 4 && py >= f.y - f.h - 4 && py <= f.y + 6)
         return { t: f.t, m: f.m, box: { x: f.x, y: f.y - f.h, w: f.w, h: f.h }, f };
       const ri = Math.floor(py / L.lh), row = L.rows[ri];
@@ -321,16 +326,17 @@
       // hover highlight
       if (this.hover && this.hover.box && !this.hover.mine) {
         const b = this.hover.box; ctx.globalAlpha = 1;
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = cur.ink ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
         ctx.strokeRect(b.x - 3, b.y - 2, b.w + 6, b.h + 4);
         if (this.hover.small) {
-          ctx.font = `700 ${cur.fs * 2.2}px ${TEX_FONT}`; ctx.fillStyle = '#fff';
+          ctx.font = `700 ${cur.fs * 2.2}px ${TEX_FONT}`; ctx.fillStyle = cur.ink ? '#000' : '#fff';
           ctx.fillText(this.hover.t.toUpperCase(), b.x, b.y - 6);
         }
       }
 
       // visitor words — larger, in their chosen colour, knocked out of the texture
-      for (const u of this.user) {
+      const ink = cur.ink;
+      for (const u of this.visibleUser()) {
         const tgt = this.userTarget(u.idx);
         let x = tgt.x, y = tgt.y;
         if (u.from && raw < 1) { x = lerp(u.from.x, tgt.x, p); y = lerp(u.from.y, tgt.y, p); }
@@ -341,6 +347,7 @@
         const size = tgt.size * sc;
         ctx.font = `italic 700 ${size}px ${SERIF}`;
         const w = ctx.measureText(u.t).width;
+        x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
         u.box = { x: x - w / 2, y: y - size * 0.75, w, h: size };
         ctx.globalAlpha = Math.min(1, land * 2);
         ctx.textAlign = 'center'; ctx.lineJoin = 'round';
@@ -352,18 +359,23 @@
         if (this.find > 0.01) {
           const pulse = 0.5 + 0.5 * Math.sin(now / 260); anim = true;
           ctx.save(); ctx.globalAlpha = this.find * (0.35 + 0.35 * pulse);
-          ctx.shadowColor = u.color; ctx.shadowBlur = 40;
-          ctx.fillStyle = u.color; ctx.fillRect(x - w / 2 - 12, y - size * 0.82, w + 24, size * 1.12);
+          ctx.shadowColor = ink ? 'transparent' : u.color; ctx.shadowBlur = 40;
+          ctx.fillStyle = ink ? '#000' : u.color; ctx.fillRect(x - w / 2 - 12, y - size * 0.82, w + 24, size * 1.12);
           ctx.restore();
           ctx.globalAlpha = this.find;
-          ctx.font = `600 11px ${TEX_FONT}`; ctx.fillStyle = '#fff';
+          ctx.font = `600 11px ${TEX_FONT}`; ctx.fillStyle = ink ? '#000' : '#fff';
           ctx.fillText('YOUR WORD', x, y - size * 0.95);
           ctx.font = `italic 700 ${size}px ${SERIF}`; ctx.globalAlpha = 1;
         }
-        ctx.lineWidth = size * 0.22; ctx.strokeStyle = 'rgba(11,7,16,0.92)';
-        ctx.strokeText(u.t, x, y);
-        ctx.shadowColor = u.color; ctx.shadowBlur = 18;
-        ctx.fillStyle = this.find > 0.5 ? '#fff' : u.color; ctx.fillText(u.t, x, y);
+        if (ink) { // pop-art sticker: accent fill, heavy black outline
+          ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#000'; ctx.strokeText(u.t, x, y);
+          ctx.fillStyle = u.color; ctx.fillText(u.t, x, y);
+        } else {
+          ctx.lineWidth = size * 0.22; ctx.strokeStyle = 'rgba(11,7,16,0.92)';
+          ctx.strokeText(u.t, x, y);
+          ctx.shadowColor = u.color; ctx.shadowBlur = 18;
+          ctx.fillStyle = this.find > 0.5 ? '#fff' : u.color; ctx.fillText(u.t, x, y);
+        }
         ctx.shadowBlur = 0;
         if (this.hover && this.hover.mine && this.hover.t === u.t) {
           ctx.fillStyle = u.color; ctx.fillRect(x - w / 2, y + size * 0.14, w, 2);

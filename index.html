@@ -7,14 +7,17 @@
 <meta name="description" content="Prototype: a birthday tribute portrait built from everyone's words.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Barlow+Condensed:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body data-state="hero">
 
 <header class="top">
   <a class="mark" href="#top" aria-label="Back to top"><span class="mark__pm">PM</span><span class="mark__t">A portrait in words</span></a>
-  <button class="btn btn--ghost js-write" type="button">Write a message</button>
+  <div class="top__r">
+    <div class="look" role="group" aria-label="Visual direction (prototype review)"><span>Look</span><button type="button" data-look="poster">Poster</button><button type="button" data-look="glow">Glow</button></div>
+    <button class="btn btn--ghost js-write" type="button">Write a message</button>
+  </div>
 </header>
 
 <nav class="rail" aria-label="Facets"></nav>
@@ -35,7 +38,7 @@
     <section class="hero" data-state="hero">
       <div class="hero__copy">
         <p class="eyebrow">A birthday tribute · Prototype</p>
-        <h1 class="hero__title">How do you see <em>Dr.&nbsp;Pawan Munjal?</em></h1>
+        <h1 class="hero__title">How do <span class="nb">you see</span> <em>Dr.&nbsp;Pawan Munjal?</em></h1>
         <p class="hero__sub">Add your words to his story.</p>
         <div class="hero__cta">
           <button class="btn btn--primary js-write" type="button">Write a message</button>
