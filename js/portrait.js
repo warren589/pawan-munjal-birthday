@@ -14,11 +14,12 @@
 
   // tone 0 = highlight, 1 = deep shadow. S-curve keeps highlights clean and features deep;
   // the floor keeps every part of the silhouette made of (light) words.
-  const toneOf = l => { const k = Math.min(1, Math.max(0, (0.85 - l) / 0.7)); return 0.06 + 0.94 * k * k * (3 - 2 * k); };
+  const toneOf = l => { const k = Math.min(1, Math.max(0, (0.88 - l) / 0.72)); return 0.07 + 0.93 * k * k * (3 - 2 * k); };
 
   function ramp(mid, dark) {
-    const m = hex(mid), d = hex(dark), floor = hex('#e2d9cc');
-    const stops = [[0, floor], [0.12, mix(floor, m, 0.45)], [0.38, m], [0.66, mix(m, d, 0.55)], [1, d]];
+    const m = hex(mid), d = hex(dark), floor = hex('#d6cbbd');
+    const deep = mix(d, [12, 10, 9], 0.45);
+    const stops = [[0, floor], [0.1, mix(floor, m, 0.5)], [0.28, m], [0.5, mix(m, d, 0.65)], [0.74, d], [1, deep]];
     return t => {
       let k = 0; while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
       const [t0, c0] = stops[k], [t1, c1] = stops[k + 1];
@@ -42,7 +43,7 @@
     async init(portraits) {
       for (const [k, v] of Object.entries(portraits)) {
         const [lum, mask] = await Promise.all([load(v.lum), load(v.mask)]);
-        this.src[k] = { lum: field(lum), mask: field(mask) };
+        this.src[k] = { lum: field(lum), mask: field(mask), aspect: lum.width / lum.height };
       }
       // placeholder: a soft, featureless silhouette of the studio portrait, for facets awaiting photography
       const s = this.src.studio, gl = canvas(s.mask.w, s.mask.h), gx = gl.getContext('2d');
@@ -51,16 +52,22 @@
       const gr = gx.createLinearGradient(0, 0, 0, gl.height); gr.addColorStop(0, '#d8d8d8'); gr.addColorStop(1, '#9a9a9a');
       gx.fillStyle = gr; gx.fillRect(0, 0, gl.width, gl.height);
       gx.globalCompositeOperation = 'destination-over'; gx.fillStyle = '#fff'; gx.fillRect(0, 0, gl.width, gl.height);
-      this.src.ghost = { lum: field(gl), mask: s.mask, ghost: true };
+      this.src.ghost = { lum: field(gl), mask: s.mask, ghost: true, aspect: s.aspect };
     }
 
-    // spec: { key, img, head:[cx,cy,rx,ry]|null, ink:[mid,dark], words:[{t,m}], seed }
-    layout(spec, W, H, dpr) {
-      const ck = `${spec.key}|${W}x${H}@${dpr}`;
+    aspect(spec) { return this.src[spec.img || 'ghost'].aspect; }
+
+    // spec: { key, img, heads:[[cx,cy,rx,ry]...]|null, ink:[mid,dark], words:[{t,m}], seed }
+    // W x H is the box the portrait must fit; the portrait keeps its photograph's aspect and sits bottom-centre.
+    layout(spec, BW, BH, dpr) {
+      const ar = this.aspect(spec);
+      let W = BW, H = BW / ar; if (H > BH) { H = BH; W = BH * ar; }
+      W = Math.round(W); H = Math.round(H);
+      const ck = `${spec.key}|${BW}x${BH}@${dpr}`;
       if (this.cache.has(ck)) return this.cache.get(ck);
       const src = this.src[spec.img || 'ghost'], L = sample(src.lum), M = sample(src.mask);
-      const head = spec.img ? spec.head : null;
-      const inHead = (u, v) => head && ((u - head[0]) / head[2]) ** 2 + ((v - head[1]) / head[3]) ** 2 < 1;
+      const heads = spec.img ? (spec.heads || []) : [];
+      const inHead = (u, v) => heads.some(h => ((u - h[0]) / h[2]) ** 2 + ((v - h[1]) / h[3]) ** 2 < 1);
       const cw = Math.round(W * dpr), chh = Math.round(H * dpr), R = rng(spec.seed || 7);
       const words = [];
 
@@ -80,7 +87,9 @@
             const wt = 400 + Math.round(3 * toneOf(L(u0, v0))) * 100;         // 400–700, heavier in shadow
             const w = measure(text, wt);
             const u = (px + w / 2) / W;
-            if (M(u, v0) > 0.5 || M(Math.min(1, (px + w) / W), v0) > 0.5 || M(Math.max(0, px / W), v0) > 0.5) {
+            // any word touching the silhouette is set; the smoothed outline trims it afterwards
+            const inside = M(u, v0) > 0.5 || M(Math.min(1, (px + w) / W), v0) > 0.5 || M(Math.max(0, px / W), v0) > 0.5;
+            if (inside) {
               x.font = font(wt); x.fillText(text, px, y);
               if (M(u, v0) > 0.5 && (region === 'head') === !!inHead(u, v0))
                 words.push({ x: px, y: y - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)) });
@@ -92,12 +101,14 @@
       };
 
       const tex = canvas(cw, chh), tx = tex.getContext('2d');
-      const body = layer(head ? 140 : 150, 'body');
-      if (head) {
-        const fine = layer(200, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
+      // word size follows the portrait's height so a wide group photo keeps the same type size as a tall one
+      const bodyRows = Math.round(140 * H / BH), headRows = Math.round(200 * H / BH);
+      const body = layer(heads.length ? bodyRows : 150, 'body');
+      if (heads.length) {
+        const fine = layer(headRows, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
         const ell = (ctx, op) => {
           ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = op; ctx.fillStyle = '#000';
-          ctx.beginPath(); ctx.ellipse(head[0] * cw, head[1] * chh, head[2] * cw, head[3] * chh, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); heads.forEach(h => { ctx.moveTo(h[0] * cw + h[2] * cw, h[1] * chh); ctx.ellipse(h[0] * cw, h[1] * chh, h[2] * cw, h[3] * chh, 0, 0, Math.PI * 2); }); ctx.fill();
           ctx.globalCompositeOperation = 'source-over';
         };
         ell(fx, 'destination-in'); ell(bx, 'destination-out');
@@ -106,10 +117,12 @@
 
       // colour every letter pixel from the tone-mapped photograph, then cut to the silhouette
       tx.globalCompositeOperation = 'source-in'; tx.drawImage(this.paint(spec, src), 0, 0, cw, chh);
+      // trim to the silhouette with an anti-aliased edge, so letters end along a clean contour
+      tx.imageSmoothingQuality = 'high';
       tx.globalCompositeOperation = 'destination-in'; tx.drawImage(src.mask.img, 0, 0, cw, chh);
       tx.globalCompositeOperation = 'source-over';
 
-      const out = { key: spec.key, tex, words, W, H, dpr, slots: new Map(), used: new Set() };
+      const out = { key: spec.key, tex, words, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;

@@ -65,8 +65,8 @@
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
-      ? { key: 'f' + fi, code, img: f.img, head: f.head, ink: f.ink, words, seed: 100 + fi }
-      : { key: state, code: null, img: S.img, head: S.head, ink: S.ink, inks: state === 'final' ? FACETS.map(x => x.ink) : null, words, seed: state === 'hero' ? 11 : 99 });
+      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, ink: f.ink, words, seed: 100 + fi }
+      : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: state === 'final' ? FACETS.map(x => x.ink) : null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
   // ---------------- chapters, rail ----------------
@@ -100,8 +100,10 @@
   const MOBILE = window.matchMedia('(max-width: 820px), (max-width: 1100px) and (orientation: portrait)');
   function geometry() {
     const vw = innerWidth, vh = innerHeight;
-    const h = MOBILE.matches ? Math.min(vh * 0.6, vw * 1.5) : Math.min(vh * 0.9, vw * 0.5 * 1.5);
-    H = Math.round(h); W = Math.round(h * 2 / 3); dpr = Math.min(2, devicePixelRatio || 1);
+    // the stage box; each portrait fits inside it at its own aspect, bottom-centred
+    if (MOBILE.matches) { W = Math.round(vw - 24); H = Math.round(Math.min(vh * 0.58, W * 1.5)); }
+    else { W = Math.round(vw * 0.54); H = Math.round(vh * 0.86); }
+    dpr = Math.min(2, devicePixelRatio || 1);
     frame.style.width = W + 'px'; frame.style.height = H + 'px';
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
   }
@@ -109,7 +111,7 @@
 
   // visitor words: { id, t, facets, m, arrived:{state:time}, landed }
   const visitor = [];
-  let find = 0, findTarget = 0, hover = null, view = { a: 'hero', b: 'hero', e: 0, state: 'hero' };
+  let find = 0, findTarget = 0, hover = null, picked = null, view = { a: 'hero', b: 'hero', e: 0, state: 'hero' };
   const showsIn = (v, s) => { const sp = spec(s); return !sp.code || v.facets.includes(sp.code); };
 
   // scroll position → which two portraits are on stage and how far between them
@@ -128,8 +130,9 @@
     const L = layoutFor(s); let anim = false;
     ctx.save();
     ctx.translate(W / 2, H / 2 + dy); ctx.scale(scale, scale); ctx.translate(-W / 2, -H / 2);
+    ctx.translate(L.ox, L.oy);
     ctx.globalAlpha = alpha * (1 - 0.78 * find);
-    ctx.drawImage(L.tex, 0, 0, W, H);
+    ctx.drawImage(L.tex, 0, 0, L.W, L.H);
     // visitor words sit in the fabric at word size, in the one accent ink
     ctx.textBaseline = 'alphabetic';
     for (const v of visitor) {
@@ -149,9 +152,9 @@
       ctx.globalAlpha = alpha; ctx.fillStyle = ACCENT;
       ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1); ctx.textAlign = 'center'; ctx.fillText(slot.text, 0, 0); ctx.restore();
     }
-    if (hover && hover.state === s && hover.w) {
-      const w = hover.w; ctx.globalAlpha = alpha; ctx.fillStyle = w.mine ? ACCENT : '#2a2622';
-      ctx.fillRect(w.x, w.y + w.h + 1, w.w, 1);
+    for (const hv of [hover, picked]) if (hv && hv.state === s && hv.w) {
+      const w = hv.w; ctx.globalAlpha = alpha; ctx.fillStyle = w.mine ? ACCENT : '#2a2622';
+      ctx.fillRect(w.x - 1, w.y + w.h + 1, w.w + 2, hv === picked ? 1.5 : 1);
     }
     ctx.restore();
     return anim;
@@ -192,7 +195,7 @@
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
-  const local = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+  const local = e => { const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
   function wordAt(x, y, pad) {
     const s = view.state, L = layoutFor(s);
     for (const v of visitor) {
@@ -208,33 +211,67 @@
     cv.style.cursor = w ? 'pointer' : 'default';
     if (w) {
       loupe.textContent = w.t; loupe.classList.toggle('mine', !!w.mine);
-      loupe.style.transform = `translate(${Math.min(W - 40, Math.max(0, w.x + w.w / 2))}px, ${w.y - 8}px)`;
+      const L = layoutFor(view.state);
+      loupe.style.transform = `translate(${L.ox + w.x + w.w / 2}px, ${L.oy + w.y - 8}px)`;
       loupe.classList.add('on');
     } else loupe.classList.remove('on');
     kick();
   });
   cv.addEventListener('pointerleave', () => { hover = null; loupe.classList.remove('on'); kick(); });
-  cv.addEventListener('click', e => { const [x, y] = local(e), w = wordAt(x, y, e.pointerType === 'mouse' ? 1 : 8); if (w) openSheet(w.t, w.m); });
+  cv.addEventListener('click', e => {
+    const [x, y] = local(e), w = wordAt(x, y, e.pointerType === 'mouse' ? 1 : 8);
+    if (w) { picked = { state: view.state, w }; openSheet(w.t, w.m); kick(); } else closeReader();
+  });
 
   // ---------------- word sheet ----------------
   const sheet = $('.sheet'), sheetBody = $('.sheet__body');
-  function openSheet(word, mi) {
+  const reader = $('.reader'), lead = $('.lead');
+  function closeReader() {
+    if (!body.classList.contains('reading-word')) return;
+    body.classList.remove('reading-word'); picked = null; lead.classList.remove('on'); kick();
+  }
+  function placeLead() {
+    if (!picked || !body.classList.contains('reading-word')) return;
+    const L = layoutFor(picked.state), r = cv.getBoundingClientRect(), sc = r.width / W, w = picked.w;
+    const x1 = r.left + (L.ox + w.x + w.w) * sc + 4, y1 = r.top + (L.oy + w.y + w.h * 0.6) * sc;
+    const rr = reader.getBoundingClientRect(), x2 = rr.left - 18, y2 = rr.top + 64;
+    lead.setAttribute('d', `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`);
+  }
+  addEventListener('scroll', () => { if (body.classList.contains('reading-word') && view.state !== (picked && picked.state)) closeReader(); else placeLead(); }, { passive: true });
+  addEventListener('resize', placeLead);
+  function readerHTML(word, mi) {
     const m = messages[mi] || messages[0], codes = m.mine ? [...m.facets] : facetsOf(word);
     const rel = messages.map((x, i) => i).filter(i => i !== mi && !messages[i].mine && messages[i].words.includes(word)).slice(0, 3);
-    sheetBody.innerHTML = `
+    const re = new RegExp(`\\b(${[...ALIAS].filter(([, v]) => v === word).map(([k]) => k).join('|')})\\w*`, 'gi');
+    const text = esc(m.text).replace(re, '<u>$&</u>');
+    return `
       <p class="eyebrow">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
       <h3 id="sheet-word" class="${m.mine ? 'mine' : ''}">${esc(word)}</h3>
-      <blockquote${m.mine ? ' class="pending"' : ''}><p>“${esc(m.text)}”</p>
+      <blockquote${m.mine ? ' class="pending"' : ''}><p>“${text}”</p>
         <cite>${esc(m.name || 'Anonymous')}${m.rel ? `<span>${esc(m.rel)}</span>` : ''}</cite></blockquote>
       ${m.mine ? '<p class="fine">Your message · only you can see it until it has been approved.</p>' : ''}
       ${rel.length ? `<p class="eyebrow">Also said by</p><ul class="rel">${rel.map(i => `<li><button type="button" data-i="${i}">“${esc(messages[i].text)}” <span>${esc(messages[i].name)}</span></button></li>`).join('')}</ul>` : ''}`;
+  }
+  function openSheet(word, mi) {
+    if (!MOBILE.matches) {
+      reader.querySelector('.reader__body').innerHTML = readerHTML(word, mi);
+      $$('.rel button', reader).forEach(b => b.onclick = () => openSheet(word, +b.dataset.i));
+      closeToast(); body.classList.add('reading-word');
+      requestAnimationFrame(() => { placeLead(); lead.classList.add('on'); });
+      return;
+    }
+    openMobileSheet(word, mi);
+  }
+  function openMobileSheet(word, mi) {
+    sheetBody.innerHTML = readerHTML(word, mi);
     $$('.rel button', sheetBody).forEach(b => b.onclick = () => openSheet(word, +b.dataset.i));
     show(sheet);
   }
   sheet.addEventListener('click', e => { if (e.target.closest('.js-close-sheet')) hide(sheet); });
   function show(el) { clearTimeout(el._t); el.hidden = false; requestAnimationFrame(() => el.classList.add('open')); body.classList.add('locked'); }
   function hide(el) { el.classList.remove('open'); clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 420); if (!$$('.composer.open, .sheet.open').length) body.classList.remove('locked'); }
-  addEventListener('keydown', e => { if (e.key === 'Escape') { if (sheet.classList.contains('open')) hide(sheet); else if (composer.classList.contains('open')) hide(composer); } });
+  $('.js-close-reader').addEventListener('click', closeReader);
+  addEventListener('keydown', e => { if (e.key === 'Escape') { closeReader(); if (sheet.classList.contains('open')) hide(sheet); else if (composer.classList.contains('open')) hide(composer); } });
 
   // ---------------- composer → words fly into the portrait ----------------
   const composer = $('.composer'), form = $('.panel'), ta = form.elements.msg, preview = $('.msgpreview');
@@ -278,7 +315,7 @@
         let tx, ty, size, railBtn = null;
         if (inHere) {
           const slot = wp.slotFor(L, v.id, v.t.toUpperCase());
-          tx = rect.left + (slot.x + slot.w / 2) * sc; ty = rect.top + (slot.y + slot.h / 2) * sc; size = slot.fs * sc;
+          tx = rect.left + (L.ox + slot.x + slot.w / 2) * sc; ty = rect.top + (L.oy + slot.y + slot.h / 2) * sc; size = slot.fs * sc;
         } else {
           railBtn = rail.querySelector(`[data-go="${CODES.indexOf(v.facets[0])}"]`);
           const r = railBtn.getBoundingClientRect(); tx = r.right - 6; ty = r.top + r.height / 2; size = 10;

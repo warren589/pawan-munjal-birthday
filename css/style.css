@@ -55,7 +55,7 @@ body.on-letters .rail, body.on-letters .findpill { opacity: 0; pointer-events: n
 /* ---------- stage: one sticky portrait, notes scroll past it ---------- */
 main { position: relative; }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; z-index: 1; }
-.frame { position: absolute; top: 50%; left: 34%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 1.2s var(--ease); }
+.frame { position: absolute; top: calc(50% + 14px); left: 33%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 1.2s var(--ease); }
 body.ready .frame { opacity: 1; }
 .portrait { display: block; }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
@@ -200,3 +200,22 @@ textarea.err { border-color: var(--accent); }
   .letter p { font-size: 19px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } html { scroll-behavior: auto; } }
+
+/* ---------- desktop reader: the message takes the note's place, tied to its word by a hairline ---------- */
+.reader { position: fixed; left: 64vw; top: 50%; width: min(360px, 28vw); z-index: 20; transform: translateY(calc(-50% + 18px)); opacity: 0; pointer-events: none; transition: opacity .55s var(--ease), transform .55s var(--ease); }
+body.reading-word .reader { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+body.reading-word .flow .note { opacity: 0 !important; pointer-events: none; transition-duration: .35s; }
+.reader .x { right: -8px; top: -10px; }
+.reader h3 { font: 600 40px/1 var(--narrow); text-transform: uppercase; letter-spacing: .02em; margin: 0 0 22px; }
+.reader h3.mine { color: var(--accent); }
+.reader blockquote { margin: 0 0 22px; padding: 0 0 0 18px; border-left: 1px solid var(--ink); }
+.reader blockquote p { font: 400 23px/1.42 var(--serif); margin: 0 0 14px; }
+.reader blockquote.pending p { color: var(--ink-soft); }
+.reader blockquote u, .sheet blockquote u { text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.reader cite { font: normal 500 13px/1.4 var(--sans); display: block; }
+.reader cite span { display: block; font-weight: 400; color: var(--muted); }
+.reader .rel button { font-size: 14px; }
+.leadsvg { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 19; }
+.lead { fill: none; stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 600; stroke-dashoffset: 600; opacity: 0; transition: stroke-dashoffset .8s var(--ease) .1s, opacity .3s; }
+.lead.on { stroke-dashoffset: 0; opacity: .7; }
+@media (max-width: 820px), (max-width: 1100px) and (orientation: portrait) { .reader, .leadsvg { display: none; } }

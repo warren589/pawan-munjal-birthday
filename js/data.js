@@ -2,38 +2,38 @@
 // Facet codes: L Visionary Leader · G Golfer · F Family Man · M Mentor · W Global Leader · H Humanitarian · J Journey
 
 window.FACETS = [
-  { code: 'L', name: 'Visionary Leader', short: 'Leader', img: 'leader', head: [0.46, 0.34, 0.17, 0.14],
+  { code: 'L', name: 'Visionary Leader', short: 'Leader', img: 'leader', heads: [[0.45, 0.17, 0.2, 0.15]],
     ink: ['#6c6f8f', '#1f2340'],
     kicker: 'He saw further, and built toward it.',
     lede: 'A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone to grow into it.' },
-  { code: 'G', name: 'Sports Enthusiast', short: 'Golfer', img: 'golf', head: [0.22, 0.17, 0.17, 0.14],
+  { code: 'G', name: 'Sports Enthusiast', short: 'Golfer', img: 'golf', heads: [[0.17, 0.12, 0.2, 0.1]],
     ink: ['#73857a', '#24332b'],
     kicker: 'Patience, precision, and the quiet joy of the game.',
     lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus and a deep respect for fair play.' },
-  { code: 'F', name: 'Family Man', short: 'Family', img: null, head: null,
+  { code: 'F', name: 'Family Man', short: 'Family', img: 'family', heads: [[0.12, 0.1, 0.06, 0.08], [0.24, 0.13, 0.06, 0.08], [0.37, 0.07, 0.07, 0.1], [0.53, 0.12, 0.06, 0.08], [0.66, 0.17, 0.06, 0.08], [0.82, 0.11, 0.07, 0.09]],
     ink: ['#a0705b', '#3b2219'],
     kicker: 'Behind every title, a home full of warmth.',
     lede: 'A father and grandfather first. The values he carries into every boardroom were shaped, and are still kept, at home.' },
-  { code: 'M', name: 'Mentor', short: 'Mentor', img: null, head: null,
+  { code: 'M', name: 'Mentor', short: 'Mentor', img: null, heads: null,
     ink: ['#9c8355', '#3a2e17'],
     kicker: 'He believed in people before they believed in themselves.',
     lede: 'Generations of leaders remember a conversation, a nudge, a door held open.' },
-  { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', head: [0.51, 0.2, 0.21, 0.14],
+  { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', heads: [[0.28, 0.18, 0.1, 0.14], [0.69, 0.21, 0.09, 0.13]],
     ink: ['#6a8589', '#1d3035'],
     kicker: 'An Indian story, told to the world.',
     lede: 'Built on relationships and mutual respect, his reach extends across markets and cultures, always with India at its heart.' },
-  { code: 'H', name: 'Humanitarian', short: 'Humanitarian', img: 'humanitarian', head: [0.62, 0.28, 0.19, 0.14],
+  { code: 'H', name: 'Humanitarian', short: 'Humanitarian', img: 'humanitarian', heads: [[0.6, 0.17, 0.13, 0.11]],
     ink: ['#93687a', '#3a1f2b'],
     kicker: 'Progress means little unless it lifts others.',
     lede: 'Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.' },
-  { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', head: [0.33, 0.46, 0.11, 0.09],
+  { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', heads: [[0.47, 0.12, 0.1, 0.11]],
     ink: ['#8f7a66', '#33261c'],
     kicker: 'Decades of roads travelled, and still moving.',
     lede: 'Milestones, memories and millions of miles, measured in everyone who came along for the ride.' }
 ];
 
 // The opening and closing portrait: the studio photograph, warm grey ink
-window.STUDIO = { img: 'studio', head: [0.49, 0.32, 0.23, 0.22], ink: ['#8d8174', '#161311'] };
+window.STUDIO = { img: 'studio', heads: [[0.46, 0.22, 0.27, 0.23]], ink: ['#8d8174', '#161311'] };
 
 // Curated vocabulary: "word[,alias…]|FACETS"
 window.VOCAB_RAW = [
