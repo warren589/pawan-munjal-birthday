@@ -7,7 +7,7 @@
 <meta name="description" content="Prototype: a birthday tribute portrait built from everyone's words.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Barlow+Condensed:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..900&family=Barlow+Condensed:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body data-state="hero">
@@ -25,7 +25,6 @@
 <main class="story" id="top">
   <div class="stage" aria-hidden="false">
     <div class="aura"></div>
-    <div class="field" aria-hidden="true"></div>
     <div class="pbox">
       <canvas class="portrait" aria-label="A portrait of Dr. Pawan Munjal made from words. Tap a word to read the message behind it."></canvas>
       <div class="ph-tag" aria-hidden="true"><span class="ph-dot"></span>Placeholder composition · final client photograph will form this portrait</div>
@@ -59,12 +58,36 @@
         <div class="finale__cta">
           <button class="btn btn--primary js-write" type="button">Add your words</button>
           <button class="btn btn--ghost js-find-inline" type="button" hidden>Find my words</button>
+          <button class="btn btn--ghost" type="button" data-go="board">Read every message ↓</button>
         </div>
       </div>
     </section>
-    <footer class="foot">Interactive prototype · demo data · all messages fictional</footer>
   </div>
 </main>
+
+<section class="board" id="board" aria-labelledby="board-title">
+  <div class="board__head">
+    <div class="board__intro">
+      <p class="eyebrow">The message board</p>
+      <h2 id="board-title" class="board__title">Every voice,<br><em>in full.</em></h2>
+    </div>
+    <div class="board__aside">
+      <p class="board__sub">The portrait is built from these messages. The highlighted words are the ones that appear in it.</p>
+      <p class="board__stats"><b class="js-bcount">0</b> messages <span>·</span> <b>7</b> facets</p>
+    </div>
+  </div>
+  <div class="board__tools">
+    <div class="board__filters" role="group" aria-label="Filter by facet"></div>
+    <label class="board__search"><span class="sr">Search messages</span><input type="search" placeholder="Search words or names"></label>
+  </div>
+  <div class="board__grid" aria-live="polite"></div>
+  <p class="board__empty" hidden>No messages match yet — be the first to say it.</p>
+  <div class="board__more">
+    <button class="btn btn--ghost js-more" type="button">Show more messages</button>
+    <button class="btn btn--primary js-write" type="button">Add your message</button>
+  </div>
+</section>
+<footer class="foot">Interactive prototype · demo data · all messages fictional</footer>
 
 <button class="findpill" type="button" hidden><span class="findpill__dot"></span><span class="findpill__label">Find my words</span></button>
 

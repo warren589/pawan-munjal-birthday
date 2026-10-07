@@ -7,6 +7,7 @@
   const GW = 600, GH = 900;
   const TEX_FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
   const SERIF = '"Fraunces", Georgia, serif';
+  const DISPLAY = '"Archivo", "Arial Black", sans-serif';
 
   function rng(seed) {
     let a = seed >>> 0;
@@ -172,9 +173,10 @@
       for (const [n, rel, style] of tiers) {
         for (let i = 0; i < n && fi < spec.featured.length; i++, fi++) {
           const item = spec.featured[fi], size = H * rel;
-          const text = style === 'serif' ? item.t : item.t.toUpperCase();
-          const font = style === 'serif' ? `italic 600 $ ${SERIF}` : `700 $ ${TEX_FONT}`;
-          const w = this.measure(text, font) * size, h = size * (style === 'serif' ? 0.9 : 0.78);
+          const serif = style === 'serif' && !spec.bold;
+          const text = serif ? item.t : item.t.toUpperCase();
+          const font = serif ? `italic 600 $ ${SERIF}` : style === 'serif' ? `900 $ ${DISPLAY}` : `700 $ ${TEX_FONT}`;
+          const w = this.measure(text, font) * size, h = size * (serif ? 0.9 : 0.78);
           let best = null, bestCost = Infinity;
           for (let k = 0; k < 160; k++) {
             const r = { x: W * 0.04 + R() * (W * 0.92 - w), y: H * 0.04 + R() * (H * 0.92 - h), w, h };
@@ -239,7 +241,7 @@
       gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.06, '#000'); gy.addColorStop(0.93, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)');
       tx.fillStyle = gy; tx.fillRect(0, 0, tex.width, tex.height);
 
-      const out = { key: spec.key, tex, rows, lh, fs, featured, slots: spec.slots, lut, ink: !!spec.ink };
+      const out = { key: spec.key, tex, rows, lh, fs, featured, slots: spec.slots, lut, ink: !!spec.ink, bold: !!spec.bold };
       this.cache.set(spec.key, out);
       while (this.cache.size > 10) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -336,6 +338,8 @@
 
       // visitor words — larger, in their chosen colour, knocked out of the texture
       const ink = cur.ink;
+      const uFont = sz => cur.bold ? `900 ${sz * 0.86}px ${DISPLAY}` : `italic 700 ${sz}px ${SERIF}`;
+      const uText = t => cur.bold ? t.toUpperCase() : t;
       for (const u of this.visibleUser()) {
         const tgt = this.userTarget(u.idx);
         let x = tgt.x, y = tgt.y;
@@ -345,8 +349,8 @@
         const land = Math.min(1, age / 900); if (land < 1) anim = true;
         const sc = 1 + 0.35 * Math.pow(1 - land, 3);
         const size = tgt.size * sc;
-        ctx.font = `italic 700 ${size}px ${SERIF}`;
-        const w = ctx.measureText(u.t).width;
+        ctx.font = uFont(size);
+        const label = uText(u.t), w = ctx.measureText(label).width;
         x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
         u.box = { x: x - w / 2, y: y - size * 0.75, w, h: size };
         ctx.globalAlpha = Math.min(1, land * 2);
@@ -365,16 +369,16 @@
           ctx.globalAlpha = this.find;
           ctx.font = `600 11px ${TEX_FONT}`; ctx.fillStyle = ink ? '#000' : '#fff';
           ctx.fillText('YOUR WORD', x, y - size * 0.95);
-          ctx.font = `italic 700 ${size}px ${SERIF}`; ctx.globalAlpha = 1;
+          ctx.font = uFont(size); ctx.globalAlpha = 1;
         }
         if (ink) { // pop-art sticker: accent fill, heavy black outline
-          ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#000'; ctx.strokeText(u.t, x, y);
-          ctx.fillStyle = u.color; ctx.fillText(u.t, x, y);
+          ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#000'; ctx.strokeText(label, x, y);
+          ctx.fillStyle = u.color; ctx.fillText(label, x, y);
         } else {
           ctx.lineWidth = size * 0.22; ctx.strokeStyle = 'rgba(11,7,16,0.92)';
-          ctx.strokeText(u.t, x, y);
+          ctx.strokeText(label, x, y);
           ctx.shadowColor = u.color; ctx.shadowBlur = 18;
-          ctx.fillStyle = this.find > 0.5 ? '#fff' : u.color; ctx.fillText(u.t, x, y);
+          ctx.fillStyle = this.find > 0.5 ? '#fff' : u.color; ctx.fillText(label, x, y);
         }
         ctx.shadowBlur = 0;
         if (this.hover && this.hover.mine && this.hover.t === u.t) {
