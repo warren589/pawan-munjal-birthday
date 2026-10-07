@@ -37,7 +37,7 @@
 <body>
 <header>
   <h1>Portrait variations</h1>
-  <p>The same supplied photograph, the same words and the same word size in all three. Only the case and the engraving techniques change. Move the pointer over A and B to see the two-layer depth. Zoom the browser in to check legibility; the portraits re-render sharply.</p>
+  <p>The same supplied photograph, the same words and the same word size in all three. Only the case and the engraving techniques change. Zoom the browser in to check legibility; the portraits re-render sharply.</p>
 </header>
 
 <nav><a href="#v-a">A · Capitals</a><a href="#v-b">B · Lowercase</a><a href="#v-c">C · Flat</a></nav>
@@ -209,16 +209,6 @@
 
   const stages = [...document.querySelectorAll('.stage')];
   stages.forEach(render);
-
-  // two-layer relief: the face layer moves slightly more than the body layer
-  stages.filter(s => VARIANTS[s.dataset.variant].engraved).forEach(s => {
-    s.addEventListener('pointermove', e => {
-      const r = s.getBoundingClientRect(), mx = (e.clientX - r.left) / r.width - 0.5, my = (e.clientY - r.top) / r.height - 0.5;
-      s.querySelector('[data-layer=face]').style.transform = `translate(${mx * 7}px, ${my * 5}px)`;
-      s.querySelector('[data-layer=body]').style.transform = `translate(${mx * -3}px, ${my * -2}px)`;
-    });
-    s.addEventListener('pointerleave', () => s.querySelectorAll('canvas').forEach(c => { c.style.transform = ''; }));
-  });
 
   let t, lastDpr = devicePixelRatio;
   addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { stages.forEach(render); lastDpr = devicePixelRatio; }, 200); });
