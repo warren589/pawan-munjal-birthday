@@ -39,10 +39,13 @@
     const ranked = [...found.values()].sort((a, b) =>
       (b.count * 3 + VOCAB.get(b.w).facets.size * 0.6 + (b.w.length > 6 ? 0.5 : 0) - b.first * 0.01) -
       (a.count * 3 + VOCAB.get(a.w).facets.size * 0.6 + (a.w.length > 6 ? 0.5 : 0) - a.first * 0.01));
-    const words = ranked.slice(0, 3).map(r => r.w), fallback = new Set();
-    // prefer fallback words this visitor hasn't already placed, so repeat visits don't stack duplicates
-    const fbs = [...window.FALLBACK_WORDS.filter(f => !usedWords.has(f)), ...window.FALLBACK_WORDS];
-    for (const fb of fbs) { if (words.length >= 3) break; if (!words.includes(fb)) { words.push(fb); fallback.add(fb); } }
+    // every vocabulary word found in the message is kept; only when nothing matches do we fall back
+    const words = ranked.map(r => r.w), fallback = new Set();
+    if (!words.length) {
+      // prefer fallback words this visitor hasn't already placed, so repeat visits don't stack duplicates
+      const fbs = [...window.FALLBACK_WORDS.filter(f => !usedWords.has(f)), ...window.FALLBACK_WORDS];
+      for (const fb of fbs) { if (words.length >= 2) break; if (!words.includes(fb)) { words.push(fb); fallback.add(fb); } }
+    }
     return { words, ranked, fallback };
   }
   const facetsOf = (w, fallback) => (fallback && fallback.has(w)) ? ['J'] : [...(VOCAB.get(w)?.facets || ['J'])];
@@ -97,7 +100,9 @@
     });
     const photo = final || fi === 0;
     return (specs[sk] = {
-      key: (final ? 'final' : 'f' + fi) + (ink ? ':ink' : '') + (bold ? ':b' : ''), ink, bold,
+      key: (final ? 'final' : 'f' + fi) + (ink ? ':ink' : '') + (bold ? ':b' : '') + (state === 'hero' ? ':hero' : ''), ink, bold,
+      code: (final || state === 'hero') ? null : CODES[fi],
+      accent: (final || state === 'hero') ? '#ffb000' : ink ? '#ffffff' : FACETS[fi].c2,
       kind: photo ? (ink ? 'ink' : 'photo') : FACETS[fi].shape,
       stops: final ? window.FINAL_STOPS : ink ? posterStops(FACETS[fi].paper) : FACETS[fi].stops,
       featured: featured.slice(0, 124), pool, seed: final ? 4242 : 101 + fi * 7, slots: photo ? SLOTS_PHOTO : SLOTS_PH,
@@ -179,7 +184,7 @@
   // Render every state's portrait in the background, one per idle slot, so scrolling never waits on layout.
   let warmGen = 0;
   function warmAll() {
-    const gen = ++warmGen, queue = ['1', '2', '3', '4', '5', '6', 'final', '0', 'hero'];
+    const gen = ++warmGen, queue = ['0', '1', '2', '3', '4', '5', '6', 'final', 'hero'];
     const idle = window.requestIdleCallback || (cb => setTimeout(cb, 60));
     const step = () => {
       if (gen !== warmGen || !queue.length) return;
@@ -224,7 +229,7 @@
       <div class="related"></div>`;
     $('.js-related', sheetBody).onclick = () => {
       const rel = messages.map((x, i) => i).filter(i => i !== mi && !messages[i].mine && (messages[i].words.includes(word) || codes.some(c => messages[i].facets.has(c)))).slice(0, 4);
-      $('.related', sheetBody).innerHTML = rel.map(i => `<button type="button" class="relitem" data-i="${i}" data-w="${messages[i].words[0]}"><span class="relitem__w">${messages[i].words.join(' · ')}</span><span class="relitem__t">“${esc(messages[i].text)}”</span><span class="relitem__n">${esc(messages[i].name)}</span></button>`).join('') || '<p class="muted">No related messages yet.</p>';
+      $('.related', sheetBody).innerHTML = rel.map(i => `<button type="button" class="relitem" data-i="${i}" data-w="${messages[i].words[0]}"><span class="relitem__w">${messages[i].words.slice(0, 3).join(' · ')}</span><span class="relitem__t">“${esc(messages[i].text)}”</span><span class="relitem__n">${esc(messages[i].name)}</span></button>`).join('') || '<p class="muted">No related messages yet.</p>';
       $('.js-related', sheetBody).remove();
     };
     $('.js-toboard', sheetBody).onclick = e => { hide(sheet); boardFilter(e.currentTarget.dataset.f); goTo('board'); };
@@ -242,9 +247,6 @@
 
   // ---------------- Composer ----------------
   const composer = $('.composer'), form = $('.step--write'), stepWords = $('.step--words');
-  const sw = $('.swatches');
-  window.ACCENTS.forEach((a, i) => sw.insertAdjacentHTML('beforeend',
-    `<label class="sw" style="--sw:${a.hex}"><input type="radio" name="color" value="${a.hex}" ${i === 0 ? 'checked' : ''}><span></span><em>${a.name}</em></label>`));
   const ta = form.elements.msg;
   ta.addEventListener('input', () => { $('.js-len').textContent = ta.value.length; ta.classList.remove('err'); });
   $$('.js-write').forEach(b => b.addEventListener('click', () => { form.hidden = false; stepWords.hidden = true; show(composer); setTimeout(() => ta.focus(), 350); }));
@@ -261,87 +263,97 @@
     const text = ta.value.trim();
     if (text.length < 3) { ta.classList.add('err'); ta.focus(); return; }
     const ex = extract(text);
-    draft = { text, name: form.elements.name.value.trim(), rel: form.elements.rel.value.trim(), color: form.elements.color.value, ...ex, swapping: -1 };
-    body.style.setProperty('--accent', draft.color);
+    draft = { text, name: form.elements.name.value.trim(), rel: form.elements.rel.value.trim(), ...ex, off: new Set() };
     renderWords(); form.hidden = true; stepWords.hidden = false;
   });
   $('.js-back').addEventListener('click', () => { form.hidden = false; stepWords.hidden = true; });
 
+  const chosen = () => draft.words.filter(w => !draft.off.has(w));
   function renderWords() {
-    const { text, words, ranked } = draft;
-    // highlight: chosen words solid, other matched vocabulary dotted
+    const { text, words, ranked, fallback, off } = draft;
+    // highlight: words going into the portrait solid, words left out dotted
     const marks = [];
-    ranked.forEach(r => r.spans.forEach(s => marks.push([...s, r.w])));
+    ranked.forEach(r => r.spans.forEach(sp => marks.push([...sp, r.w])));
     marks.sort((a, b) => a[0] - b[0]);
     let html = '', at = 0;
-    marks.forEach(([s, e2, w]) => {
-      if (s < at) return;
-      html += esc(text.slice(at, s));
-      html += words.includes(w) ? `<mark data-w="${w}">${esc(text.slice(s, e2))}</mark>` : `<span class="cand" data-w="${w}">${esc(text.slice(s, e2))}</span>`;
-      at = e2;
+    marks.forEach(([a, b, w]) => {
+      if (a < at) return;
+      html += esc(text.slice(at, a));
+      html += off.has(w) ? `<span class="cand" data-w="${w}">${esc(text.slice(a, b))}</span>` : `<mark data-w="${w}">${esc(text.slice(a, b))}</mark>`;
+      at = b;
     });
-    html += esc(text.slice(at));
-    $('.preview').innerHTML = `“${html}”`;
-    $('.slots').innerHTML = words.map((w, i) => `
-      <button type="button" class="slot${draft.swapping === i ? ' on' : ''}" data-i="${i}">
-        <span class="slot__n">0${i + 1}</span><span class="slot__w">${w}</span>
-        <span class="slot__f">${facetsOf(w, draft.fallback).map(c => FACETS[CODES.indexOf(c)].short).join(' · ')}</span>
-        <span class="slot__s">↻ swap</span>
-      </button>`).join('');
-    const swap = $('.swap');
-    if (draft.swapping >= 0) {
-      const alts = [...ranked.map(r => r.w), ...window.FALLBACK_WORDS].filter((w, i, a) => !words.includes(w) && a.indexOf(w) === i);
-      $('b', swap).textContent = words[draft.swapping];
-      $('.swap__chips', swap).innerHTML = alts.map(w => `<button type="button" class="chip${ranked.some(r => r.w === w) ? '' : ' chip--fb'}" data-w="${w}">${w}</button>`).join('');
-      swap.hidden = false;
-    } else swap.hidden = true;
+    $('.preview').innerHTML = `“${html + esc(text.slice(at))}”`;
+    const n = chosen().length;
+    $('.js-words-lede').innerHTML = fallback.size
+      ? 'We couldn’t match specific words, so your message joins his <b>Journey</b> with these.'
+      : `We found <b>${words.length}</b> word${words.length > 1 ? 's' : ''} in your message. Each one joins the portrait of the facet it speaks to. Tap a word to leave it out.`;
+    // one row per facet that receives at least one word; a word can belong to several facets
+    $('.wgroups').innerHTML = FACETS.map(f => {
+      const ws = words.filter(w => facetsOf(w, fallback).includes(f.code));
+      if (!ws.length) return '';
+      return `<div class="wg" style="--fc1:${f.c1};--fp:${f.paper}"><span class="wg__f">${f.name}</span><div class="wg__w">${
+        ws.map(w => `<button type="button" class="wchip${off.has(w) ? ' off' : ''}" data-w="${w}" aria-pressed="${!off.has(w)}">${w}</button>`).join('')}</div></div>`;
+    }).join('');
+    const btn = $('.js-confirm');
+    btn.disabled = !n;
+    btn.textContent = n ? `Add ${n === 1 ? 'my word' : `my ${n} words`} to his portrait` : 'Keep at least one word';
   }
   stepWords.addEventListener('click', e => {
-    const s = e.target.closest('.slot');
-    if (s) { const i = +s.dataset.i; draft.swapping = draft.swapping === i ? -1 : i; renderWords(); return; }
-    const c = e.target.closest('.swap .chip');
-    if (c) {
-      const w = c.dataset.w;
-      if (!draft.ranked.some(r => r.w === w)) draft.fallback.add(w);
-      draft.words[draft.swapping] = w; draft.swapping = -1; renderWords();
-    }
+    const c = e.target.closest('.wchip'); if (!c) return;
+    const w = c.dataset.w; draft.off.has(w) ? draft.off.delete(w) : draft.off.add(w); renderWords();
   });
 
   // ---------------- Contribution moment ----------------
   let mine = 0;
   $('.js-confirm').addEventListener('click', () => {
-    const d = draft, words = d.words.slice();
-    const m = { text: d.text, name: d.name, rel: d.rel, words, color: d.color, mine: true, pending: true, facets: new Set(words.flatMap(w => facetsOf(w, d.fallback))) };
+    const d = draft, words = chosen(); if (!words.length) return;
+    const entries = words.map(w => ({ t: w, facets: facetsOf(w, d.fallback) }));
+    const m = { text: d.text, name: d.name, rel: d.rel, words, color: '#ffb000', mine: true, pending: true, facets: new Set(entries.flatMap(e => e.facets)) };
     messages.push(m); const mi = messages.length - 1;
     words.forEach(w => usedWords.add(w));
-    const rect = canvas.getBoundingClientRect(), sc = rect.width / portrait.W;
-    const base = portrait.user.length;
+    const staged = portrait.stageUser(entries, mi);
+    const rect = canvas.getBoundingClientRect(), sc = rect.width / portrait.W, accent = portrait.cur.accent;
     composer.classList.add('flying');
-    words.forEach((w, i) => {
-      const srcEl = $(`.preview mark[data-w="${w}"]`) || $$('.slot__w')[i];
+    staged.forEach((u, i) => {
+      const srcEl = $(`.preview mark[data-w="${u.t}"]`) || $(`.wchip[data-w="${u.t}"]`);
       const sr = srcEl.getBoundingClientRect(), srcSize = parseFloat(getComputedStyle(srcEl).fontSize);
-      const t = portrait.userTarget(base + i), tSize = t.size * sc * (look === 'poster' ? 0.86 : 1);
-      const tx = rect.left + t.x * sc, ty = rect.top + (t.y - t.size * 0.3) * sc;
+      // words for this portrait fly into it; words for other facets fly to that facet on the timeline
+      const slot = portrait.slotFor(u);
+      const railBtn = !slot && $(`.rail button[data-go="${CODES.indexOf(u.facets[0])}"]`);
+      let tx, ty, tSize;
+      if (slot) {
+        tSize = slot.size * sc * (look === 'poster' ? 0.86 : 1);
+        tx = rect.left + slot.x * sc; ty = rect.top + (slot.y - slot.size * 0.3) * sc;
+      } else {
+        const r = railBtn.getBoundingClientRect(); tSize = 14;
+        tx = r.right - 6; ty = r.top + r.height / 2;
+      }
       const fl = document.createElement('span');
-      fl.className = 'flyer'; fl.textContent = w; fl.style.color = d.color; fl.style.fontSize = tSize + 'px';
+      fl.className = 'flyer'; fl.textContent = u.t; fl.style.color = slot ? accent : '#fff'; fl.style.fontSize = tSize + 'px';
       fl.style.left = tx + 'px'; fl.style.top = ty + 'px';
       document.body.appendChild(fl);
       const dx = sr.left + sr.width / 2 - tx, dy = sr.top + sr.height / 2 - ty, s0 = srcSize / tSize;
       const anim = fl.animate([
         { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(${s0})`, opacity: 1 },
         { transform: `translate(-50%,-50%) translate(${dx * 0.45}px,${dy * 0.45 - 90}px) scale(${(s0 + 1) * 0.75})`, opacity: 1, offset: 0.55 },
-        { transform: 'translate(-50%,-50%) translate(0,0) scale(1)', opacity: 1 }
-      ], { duration: 1250, delay: 250 + i * 220, easing: 'cubic-bezier(.65,0,.25,1)', fill: 'forwards' });
+        { transform: 'translate(-50%,-50%) translate(0,0) scale(1)', opacity: slot ? 1 : 0.2 }
+      ], { duration: 1250, delay: 250 + i * 160, easing: 'cubic-bezier(.65,0,.25,1)', fill: 'forwards' });
       anim.onfinish = () => {
-        portrait.addUser([w], d.color, mi);
-        fl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: 'forwards' }).onfinish = () => fl.remove();
-        if (i === words.length - 1) afterContribution();
+        portrait.landUser(u);
+        if (railBtn) { railBtn.classList.remove('ping'); void railBtn.offsetWidth; railBtn.classList.add('ping'); }
+        fl.animate([{ opacity: slot ? 1 : 0.2 }, { opacity: 0 }], { duration: 250, fill: 'forwards' }).onfinish = () => fl.remove();
+        if (i === staged.length - 1) afterContribution(entries);
       };
     });
     setTimeout(() => { hide(composer); composer.classList.remove('flying'); form.reset(); $('.js-len').textContent = '0'; }, 500);
   });
-  function afterContribution() {
+  function afterContribution(entries) {
     mine++;
+    // tell the visitor where each word went
+    $('.toast__w').innerHTML = FACETS.map(f => {
+      const ws = entries.filter(e => e.facets.includes(f.code)).map(e => e.t);
+      return ws.length ? `<span class="tw" style="--fc1:${f.c1}"><b>${f.short}</b>${ws.map(esc).join(', ')}</span>` : '';
+    }).join('');
     const cnt = $('.js-count'); cnt.textContent = (2418 + mine).toLocaleString('en-IN');
     const toast = $('.toast'); toast.hidden = false; body.classList.add('toasting'); requestAnimationFrame(() => toast.classList.add('open'));
     clearTimeout(toast._t); toast._t = setTimeout(() => hideToast(), 7000);

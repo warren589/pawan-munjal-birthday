@@ -93,6 +93,7 @@
 
 <div class="toast" role="status" hidden>
   <p class="toast__t">Your words are now part of his story.</p>
+  <div class="toast__w"></div>
   <p class="toast__s">Your full message will appear once approved.</p>
   <div class="toast__a"><button class="btn btn--small btn--primary js-find-toast" type="button">Find my words</button><button class="btn btn--small btn--ghost js-continue" type="button">Continue the story ↓</button></div>
 </div>
@@ -115,7 +116,6 @@
         <label class="field-l"><span>Name <i>(optional)</i></span><input name="name" autocomplete="name" placeholder="Your name"></label>
         <label class="field-l"><span>Relationship / organisation <i>(optional)</i></span><input name="rel" placeholder="e.g. Colleague, Hero MotoCorp"></label>
       </div>
-      <fieldset class="swatches"><legend>Choose your colour</legend></fieldset>
       <div class="composer__foot">
         <button class="btn btn--primary" type="submit">Find my words →</button>
         <button class="linkbtn js-sample" type="button">Try a sample message</button>
@@ -124,16 +124,15 @@
 
     <div class="step step--words" hidden>
       <p class="eyebrow">Step 2 of 2</p>
-      <h2 class="composer__title">Your three words</h2>
-      <p class="composer__lede">We found these in your message. Keep them, or tap one to swap it.</p>
+      <h2 class="composer__title">Your words</h2>
+      <p class="composer__lede js-words-lede"></p>
       <blockquote class="preview"></blockquote>
-      <div class="slots"></div>
-      <div class="swap" hidden><p class="swap__t">Replace <b></b> with…</p><div class="swap__chips"></div></div>
+      <div class="wgroups"></div>
       <div class="composer__foot">
         <button class="btn btn--primary js-confirm" type="button">Add my words to his portrait</button>
         <button class="linkbtn js-back" type="button">← Edit message</button>
       </div>
-      <p class="mod-note">Your three words appear instantly. Your full message is shown once it has been approved.</p>
+      <p class="mod-note">Your words appear instantly. Your full message is shown once it has been approved.</p>
     </div>
   </div>
 </div>

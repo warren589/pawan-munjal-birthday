@@ -56,15 +56,6 @@ window.FACETS = [
 
 window.FINAL_STOPS = ['#160a2c', '#7a1fa0', '#ff2e88', '#ff7a1a', '#ffd23f', '#fffaf0'];
 
-// Visitor colour palette (pick one)
-window.ACCENTS = [
-  { name: 'Saffron', hex: '#FFB000' },
-  { name: 'Magenta', hex: '#FF2E88' },
-  { name: 'Electric', hex: '#3D7BFF' },
-  { name: 'Emerald', hex: '#10D48E' },
-  { name: 'Coral', hex: '#FF5A36' }
-];
-
 // Curated vocabulary: "word[,alias…]|FACETS"
 window.VOCAB_RAW = [
   'vision,visionary,visions|LW', 'leadership,leader,leaders,lead,leading|LW', 'courage,courageous,brave|LM',

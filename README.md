@@ -7,7 +7,7 @@ A frontend-only prototype of the birthday tribute for Dr. Pawan Munjal. It uses 
 - `js/portrait.js` is the canvas word-portrait renderer. The photo tone map guides where words go, and words are composited with a colour-mapped version of it.
 - `js/data.js` holds the facets, the ~190-word curated vocabulary with facet mappings, and the demo messages (fictional).
 - `js/portrait-data.js` is the pre-processed tone map of `assets/pawan-munjal.jpg`. It is embedded as a data URI so the canvas works from `file://`.
-- `js/app.js` handles the scroll story, the message board (facet filters, search), the composer, deterministic three-word extraction (no AI), the contribution animation, the word sheet, and Find my words.
+- `js/app.js` handles the scroll story, the message board (facet filters, search), the composer, deterministic word extraction from a curated vocabulary (no AI), where every matched word joins the facets it belongs to, the contribution animation, the word sheet, and Find my words.
 
 Facets 02–07 use abstract placeholder compositions until client photography is supplied.
 

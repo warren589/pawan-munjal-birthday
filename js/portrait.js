@@ -165,7 +165,7 @@
       const hits = (r, pad) => rects.some(q => r.x < q.x + q.w + pad && r.x + r.w + pad > q.x && r.y < q.y + q.h + pad && r.y + r.h + pad > q.y);
 
       // reserve visitor slots so featured words keep clear of them
-      spec.slots.slice(0, 3).forEach(([sx, sy]) => rects.push({ x: sx * W - W * 0.2, y: sy * H - H * 0.035, w: W * 0.4, h: H * 0.07, reserved: true }));
+      spec.slots.forEach(([sx, sy]) => rects.push({ x: sx * W - W * 0.17, y: sy * H - H * 0.035, w: W * 0.34, h: H * 0.06, reserved: true }));
 
       // ---- featured words (greedy placement guided by tone + detail) ----
       // big → small; the two small tiers add a dense mid-layer of words between the headline words and the fine texture
@@ -248,7 +248,7 @@
       }
       tx.setTransform(1, 0, 0, 1, 0, 0);
 
-      const out = { key: spec.key, tex, rows, lh, fs, featured, live: featured.filter(f => !f.baked), slots: spec.slots, lut, ink: !!spec.ink, bold: !!spec.bold };
+      const out = { key: spec.key, tex, rows, lh, fs, featured, live: featured.filter(f => !f.baked), slots: spec.slots, code: spec.code || null, accent: spec.accent || '#ffb000', lut, ink: !!spec.ink, bold: !!spec.bold };
       this.cache.set(spec.key, out);
       while (this.cache.size > 10) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -257,23 +257,31 @@
     show(spec, instant) {
       const next = this.layout(spec);
       if (this.cur && this.cur.key === next.key) return;
+      const before = new Set(this.visibleUser());
       this.prev = instant ? null : this.cur; this.cur = next; this.tStart = performance.now();
-      this.user.forEach(u => { u.from = u.pos || null; });
+      // words already on screen glide to their new slot; words that only belong to this facet fade in
+      this.user.forEach(u => { u.from = before.has(u) ? u.pos : null; u.fadeIn = !before.has(u); });
       this.kick();
     }
 
-    // only the latest two contributions stay emphasised, so the portrait never fills up with stickers
-    visibleUser() { const n = this.cur ? Math.min(6, this.cur.slots.length) : 0; return this.user.slice(-n); }
-    userTarget(i) {
-      const s = this.cur.slots[i % Math.min(6, this.cur.slots.length)];
-      return { x: s[0] * this.W, y: s[1] * this.H, size: this.H * 0.05 };
+    // A facet portrait shows only the visitor words tagged with that facet; hero and finale show them all.
+    // The newest words win when there are more words than slots.
+    visibleUser() {
+      if (!this.cur) return [];
+      const code = this.cur.code;
+      return this.user.filter(u => !code || u.facets.includes(code)).slice(-this.cur.slots.length);
     }
-
-    addUser(words, color, m) {
-      const base = this.user.length, now = performance.now();
-      words.forEach((t, i) => this.user.push({ t, color, m, idx: base + i, born: now + i * 140, pos: null, from: null }));
-      this.kick();
+    slotFor(u) {
+      const v = this.visibleUser(), i = v.indexOf(u); if (i < 0) return null;
+      const s = this.cur.slots[i];
+      return { x: s[0] * this.W, y: s[1] * this.H, size: this.H * (v.length > 6 ? 0.042 : 0.05) };
     }
+    // stage words before they arrive (so their slots are known for the flight), then land them one by one
+    stageUser(words, m) {
+      const out = words.map(w => ({ t: w.t, facets: w.facets, m, born: Infinity, pos: null, from: null }));
+      this.user.push(...out); return out;
+    }
+    landUser(u) { u.born = performance.now(); this.kick(); }
 
     setFind(on) { this.findTarget = on ? 1 : 0; this.kick(); }
     setHover(h) { if ((h && h.t) !== (this.hover && this.hover.t) || (h && h.x) !== (this.hover && this.hover.x)) { this.hover = h; this.kick(); } }
@@ -347,12 +355,16 @@
       const ink = cur.ink;
       const uFont = sz => cur.bold ? `900 ${sz * 0.86}px ${DISPLAY}` : `italic 700 ${sz}px ${SERIF}`;
       const uText = t => cur.bold ? t.toUpperCase() : t;
+      const accent = cur.accent;
+      this.user.forEach(u => { u.box = null; });
       for (const u of this.visibleUser()) {
-        const tgt = this.userTarget(u.idx);
+        const tgt = this.slotFor(u);
         let x = tgt.x, y = tgt.y;
         if (u.from && raw < 1) { x = lerp(u.from.x, tgt.x, p); y = lerp(u.from.y, tgt.y, p); }
         u.pos = { x: tgt.x, y: tgt.y };
+        if (!isFinite(u.born)) continue; // still in flight
         const age = now - u.born; if (age < 0) { anim = true; continue; }
+        const fade = u.fadeIn && raw < 1 ? p : 1;
         const land = Math.min(1, age / 900); if (land < 1) anim = true;
         const sc = 1 + 0.35 * Math.pow(1 - land, 3);
         const size = tgt.size * sc;
@@ -360,18 +372,18 @@
         const label = uText(u.t), w = ctx.measureText(label).width;
         x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
         u.box = { x: x - w / 2, y: y - size * 0.75, w, h: size };
-        ctx.globalAlpha = Math.min(1, land * 2);
+        ctx.globalAlpha = Math.min(1, land * 2) * fade;
         ctx.textAlign = 'center'; ctx.lineJoin = 'round';
         if (land < 1) { // landing ring
-          ctx.strokeStyle = u.color; ctx.globalAlpha = 1 - land; ctx.lineWidth = 2;
+          ctx.strokeStyle = accent; ctx.globalAlpha = 1 - land; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.ellipse(x, y - size * 0.3, w * 0.5 + 60 * land + 10, size * 0.6 + 40 * land, 0, 0, Math.PI * 2); ctx.stroke();
           ctx.globalAlpha = Math.min(1, land * 2);
         }
         if (this.find > 0.01) {
           const pulse = 0.5 + 0.5 * Math.sin(now / 260); anim = true;
           ctx.save(); ctx.globalAlpha = this.find * (0.35 + 0.35 * pulse);
-          ctx.shadowColor = ink ? 'transparent' : u.color; ctx.shadowBlur = 40;
-          ctx.fillStyle = ink ? '#000' : u.color; ctx.fillRect(x - w / 2 - 12, y - size * 0.82, w + 24, size * 1.12);
+          ctx.shadowColor = ink ? 'transparent' : accent; ctx.shadowBlur = 40;
+          ctx.fillStyle = ink ? '#000' : accent; ctx.fillRect(x - w / 2 - 12, y - size * 0.82, w + 24, size * 1.12);
           ctx.restore();
           ctx.globalAlpha = this.find;
           ctx.font = `600 11px ${TEX_FONT}`; ctx.fillStyle = ink ? '#000' : '#fff';
@@ -380,16 +392,16 @@
         }
         if (ink) { // pop-art sticker: accent fill, heavy black outline
           ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#000'; ctx.strokeText(label, x, y);
-          ctx.fillStyle = u.color; ctx.fillText(label, x, y);
+          ctx.fillStyle = accent; ctx.fillText(label, x, y);
         } else {
           ctx.lineWidth = size * 0.22; ctx.strokeStyle = 'rgba(11,7,16,0.92)';
           ctx.strokeText(label, x, y);
-          ctx.shadowColor = u.color; ctx.shadowBlur = 18;
-          ctx.fillStyle = this.find > 0.5 ? '#fff' : u.color; ctx.fillText(label, x, y);
+          ctx.shadowColor = accent; ctx.shadowBlur = 18;
+          ctx.fillStyle = this.find > 0.5 ? '#fff' : accent; ctx.fillText(label, x, y);
         }
         ctx.shadowBlur = 0;
         if (this.hover && this.hover.mine && this.hover.t === u.t) {
-          ctx.fillStyle = u.color; ctx.fillRect(x - w / 2, y + size * 0.14, w, 2);
+          ctx.fillStyle = accent; ctx.fillRect(x - w / 2, y + size * 0.14, w, 2);
         }
         ctx.textAlign = 'start';
       }
