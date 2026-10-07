@@ -1,60 +1,39 @@
 // Local demo data — no API, no backend.
-// paper = flat full-bleed colour for the poster look (sampled from the earlier pawanmunjal.life site)
 // Facet codes: L Visionary Leader · G Golfer · F Family Man · M Mentor · W Global Leader · H Humanitarian · J Journey
 
 window.FACETS = [
-  {
-    code: 'L', paper: '#B256F5', name: 'Visionary Leader', short: 'Leader',
-    kicker: 'He saw further — and built toward it.',
-    lede: 'Colleagues describe a leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone to grow into it.',
-    stops: ['#120a2e', '#5b1a8a', '#ff2e88', '#ffb000', '#fff4dc'],
-    c1: '#ff2e88', c2: '#ffb000', shape: 'photo'
-  },
-  {
-    code: 'G', paper: '#00CC71', name: 'Sports Enthusiast', short: 'Golfer',
+  { code: 'L', name: 'Visionary Leader', short: 'Leader', img: 'leader', head: [0.46, 0.34, 0.17, 0.14],
+    ink: ['#6c6f8f', '#1f2340'],
+    kicker: 'He saw further, and built toward it.',
+    lede: 'A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone to grow into it.' },
+  { code: 'G', name: 'Sports Enthusiast', short: 'Golfer', img: 'golf', head: [0.22, 0.17, 0.17, 0.14],
+    ink: ['#73857a', '#24332b'],
     kicker: 'Patience, precision, and the quiet joy of the game.',
-    lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus, and a deep respect for fair play.',
-    stops: ['#04201b', '#08604a', '#0fbf7f', '#c6f35a', '#f5ffe2'],
-    c1: '#0fbf7f', c2: '#c6f35a', shape: 'golf'
-  },
-  {
-    code: 'F', paper: '#FF5A63', name: 'Family Man', short: 'Family',
+    lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus and a deep respect for fair play.' },
+  { code: 'F', name: 'Family Man', short: 'Family', img: null, head: null,
+    ink: ['#a0705b', '#3b2219'],
     kicker: 'Behind every title, a home full of warmth.',
-    lede: 'A father and grandfather first — the values he carries into every boardroom were shaped, and are still kept, at home.',
-    stops: ['#2a070e', '#8a1626', '#ff4b2b', '#ffb36b', '#fff1e3'],
-    c1: '#ff4b2b', c2: '#ffb36b', shape: 'family'
-  },
-  {
-    code: 'M', paper: '#FFB400', name: 'Mentor', short: 'Mentor',
+    lede: 'A father and grandfather first. The values he carries into every boardroom were shaped, and are still kept, at home.' },
+  { code: 'M', name: 'Mentor', short: 'Mentor', img: null, head: null,
+    ink: ['#9c8355', '#3a2e17'],
     kicker: 'He believed in people before they believed in themselves.',
-    lede: 'Generations of leaders remember a conversation, a nudge, a door held open. His greatest product may be the people he shaped.',
-    stops: ['#0a1030', '#1d3a9e', '#2f6bff', '#8fd3ff', '#eef8ff'],
-    c1: '#2f6bff', c2: '#8fd3ff', shape: 'mentor'
-  },
-  {
-    code: 'W', paper: '#FF743D', name: 'Global Leader', short: 'Global',
+    lede: 'Generations of leaders remember a conversation, a nudge, a door held open.' },
+  { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', head: [0.51, 0.2, 0.21, 0.14],
+    ink: ['#6a8589', '#1d3035'],
     kicker: 'An Indian story, told to the world.',
-    lede: 'Built on relationships and mutual respect, his reach extends across markets, cultures and continents — always with India at its heart.',
-    stops: ['#071430', '#0a5a7a', '#00b3c7', '#ffd23f', '#fff8dc'],
-    c1: '#00b3c7', c2: '#ffd23f', shape: 'global'
-  },
-  {
-    code: 'H', paper: '#FF0186', name: 'Humanitarian', short: 'Humanitarian',
+    lede: 'Built on relationships and mutual respect, his reach extends across markets and cultures, always with India at its heart.' },
+  { code: 'H', name: 'Humanitarian', short: 'Humanitarian', img: 'humanitarian', head: [0.62, 0.28, 0.19, 0.14],
+    ink: ['#93687a', '#3a1f2b'],
     kicker: 'Progress means little unless it lifts others.',
-    lede: 'Education, health, opportunity, dignity: a quieter body of work, driven by the belief that business exists to serve society.',
-    stops: ['#22071f', '#7a1260', '#e0218a', '#ff9fc0', '#fff0f6'],
-    c1: '#e0218a', c2: '#ff9fc0', shape: 'humanitarian'
-  },
-  {
-    code: 'J', paper: '#FFE69D', name: 'Journey', short: 'Journey',
+    lede: 'Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.' },
+  { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', head: [0.33, 0.46, 0.11, 0.09],
+    ink: ['#8f7a66', '#33261c'],
     kicker: 'Decades of roads travelled, and still moving.',
-    lede: 'Milestones, memories and millions of miles — a life measured not only in what was built, but in everyone who came along for the ride.',
-    stops: ['#1a0f03', '#6e3609', '#e0741a', '#ffcc33', '#fffae6'],
-    c1: '#e0741a', c2: '#ffcc33', shape: 'journey'
-  }
+    lede: 'Milestones, memories and millions of miles, measured in everyone who came along for the ride.' }
 ];
 
-window.FINAL_STOPS = ['#160a2c', '#7a1fa0', '#ff2e88', '#ff7a1a', '#ffd23f', '#fffaf0'];
+// The opening and closing portrait: the studio photograph, warm grey ink
+window.STUDIO = { img: 'studio', head: [0.49, 0.32, 0.23, 0.22], ink: ['#8d8174', '#161311'] };
 
 // Curated vocabulary: "word[,alias…]|FACETS"
 window.VOCAB_RAW = [

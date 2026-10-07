@@ -1,414 +1,175 @@
-// Typographic portrait renderer.
-// A grayscale "tone" source (the supplied photograph, or a placeholder shape) guides
-// where words go; small words are composited with a colour-mapped version of the tone
-// so the letters themselves carry the image. Larger featured words and the visitor's
-// own words sit on top and tween between facet states.
+// Word-portrait renderer ("fine head, uniform body").
+// Every word in an area is the same size: small condensed caps across the head for detail,
+// one slightly larger size across the body. The photograph shows through ink tone only —
+// each pixel inside the letters takes its colour from the tone-mapped photo — so no word is
+// emphasised over another.
 (function () {
-  const GW = 600, GH = 900;
-  const TEX_FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
-  const SERIF = '"Fraunces", Georgia, serif';
-  const DISPLAY = '"Archivo", "Arial Black", sans-serif';
+  const PAPER = '#f3eee6';
+  const FONT = '"Archivo Narrow", "Arial Narrow", sans-serif';
 
-  function rng(seed) {
-    let a = seed >>> 0;
-    return function () {
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  function rng(seed) { let a = seed >>> 0; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; }
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const toHex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+
+  // tone 0 = highlight, 1 = deep shadow. S-curve keeps highlights clean and features deep;
+  // the floor keeps every part of the silhouette made of (light) words.
+  const toneOf = l => { const k = Math.min(1, Math.max(0, (0.85 - l) / 0.7)); return 0.06 + 0.94 * k * k * (3 - 2 * k); };
+
+  function ramp(mid, dark) {
+    const m = hex(mid), d = hex(dark), floor = hex('#e2d9cc');
+    const stops = [[0, floor], [0.12, mix(floor, m, 0.45)], [0.38, m], [0.66, mix(m, d, 0.55)], [1, d]];
+    return t => {
+      let k = 0; while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
+      const [t0, c0] = stops[k], [t1, c1] = stops[k + 1];
+      return mix(c0, c1, Math.min(1, Math.max(0, (t - t0) / (t1 - t0))));
     };
   }
-  const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-  const lerp = (a, b, t) => a + (b - a) * t;
-  const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-  function buildLUT(stops, gamma = 1.2) {
-    const cols = stops.map(hexRgb), lut = new Uint8ClampedArray(256 * 3);
-    for (let i = 0; i < 256; i++) {
-      const v = Math.pow(i / 255, gamma) * (cols.length - 1);
-      const k = Math.min(cols.length - 2, Math.floor(v)), f = v - k;
-      for (let c = 0; c < 3; c++) lut[i * 3 + c] = lerp(cols[k][c], cols[k + 1][c], f);
-    }
-    return lut;
+  function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  async function load(src) { const i = new Image(); i.src = src; await i.decode(); return i; }
+  function field(img) {
+    const c = canvas(img.width, img.height), x = c.getContext('2d'); x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height).data, out = new Float32Array(c.width * c.height);
+    for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
+    return { w: c.width, h: c.height, d: out, img: c };
   }
-  const lutColor = (lut, v) => {
-    const i = Math.max(0, Math.min(255, Math.round(v * 255))) * 3;
-    return [lut[i], lut[i + 1], lut[i + 2]];
-  };
+  const sample = f => (u, v) => f.d[Math.min(f.h - 1, Math.max(0, (v * f.h) | 0)) * f.w + Math.min(f.w - 1, Math.max(0, (u * f.w) | 0))];
 
-  function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  class WordPortraits {
+    constructor() { this.src = {}; this.cache = new Map(); }
 
-  function grayFromCanvas(c) {
-    const d = c.getContext('2d').getImageData(0, 0, GW, GH).data, g = new Float32Array(GW * GH);
-    for (let i = 0; i < g.length; i++) g[i] = d[i * 4] / 255;
-    // coarse detail map (gradient magnitude) used to keep big words off eyes/mouth
-    const DW = 100, DH = 150, det = new Float32Array(DW * DH);
-    for (let y = 1; y < DH - 1; y++) for (let x = 1; x < DW - 1; x++) {
-      const s = (xx, yy) => g[Math.floor(yy * GH / DH) * GW + Math.floor(xx * GW / DW)];
-      det[y * DW + x] = Math.abs(s(x + 1, y) - s(x - 1, y)) + Math.abs(s(x, y + 1) - s(x, y - 1));
-    }
-    return { gray: g, det, DW, DH };
-  }
-
-  async function loadPhotoSource(src) {
-    const img = new Image(); img.src = src; await img.decode();
-    const c = makeCanvas(GW, GH); c.getContext('2d').drawImage(img, 0, 0, GW, GH);
-    return grayFromCanvas(c);
-  }
-
-  // Abstract placeholder compositions for facets awaiting client photography.
-  function shapeSource(kind) {
-    const c = makeCanvas(GW, GH), x = c.getContext('2d');
-    x.fillStyle = '#000'; x.fillRect(0, 0, GW, GH);
-    const disc = (cx, cy, r, a, b) => {
-      const g = x.createRadialGradient(cx, cy - r * 0.3, r * 0.1, cx, cy, r);
-      g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, `rgba(255,255,255,${b})`);
-      x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
-    };
-    x.globalCompositeOperation = 'lighter';
-    if (kind === 'golf') {
-      disc(330, 300, 175, 0.95, 0.35);
-      x.fillStyle = 'rgba(255,255,255,0.32)';
-      x.beginPath(); x.moveTo(0, 900); x.lineTo(0, 700); x.quadraticCurveTo(300, 520, 600, 640); x.lineTo(600, 900); x.fill();
-      x.strokeStyle = 'rgba(255,255,255,0.45)'; x.lineWidth = 34; x.lineCap = 'round';
-      x.beginPath(); x.moveTo(40, 860); x.quadraticCurveTo(260, 600, 540, 780); x.stroke();
-    } else if (kind === 'family') {
-      disc(190, 360, 150, 0.55, 0.3); disc(410, 340, 165, 0.55, 0.3); disc(300, 560, 140, 0.55, 0.3);
-      disc(300, 780, 70, 0.6, 0.25);
-    } else if (kind === 'mentor') {
-      disc(370, 360, 210, 0.7, 0.25); disc(190, 640, 110, 0.95, 0.4);
-      x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 18;
-      x.beginPath(); x.moveTo(230, 560); x.quadraticCurveTo(280, 470, 320, 520); x.stroke();
-    } else if (kind === 'global') {
-      disc(300, 440, 250, 0.85, 0.3);
-      x.globalCompositeOperation = 'source-over';
-      x.strokeStyle = 'rgba(0,0,0,0.55)'; x.lineWidth = 10;
-      for (let i = 1; i < 5; i++) { x.beginPath(); x.ellipse(300, 440, 250 * i / 5, 250, 0, 0, Math.PI * 2); x.stroke(); }
-      for (let i = -2; i <= 2; i++) { const yy = 440 + i * 90, rr = Math.sqrt(250 * 250 - (i * 90) ** 2); x.beginPath(); x.moveTo(300 - rr, yy); x.lineTo(300 + rr, yy); x.stroke(); }
-    } else if (kind === 'humanitarian') {
-      for (let i = 9; i >= 1; i--) {
-        x.globalCompositeOperation = 'source-over';
-        x.fillStyle = `rgba(255,255,255,${i % 2 ? 0.22 + (9 - i) * 0.07 : 0.06})`;
-        x.beginPath(); x.arc(300, 600, i * 48, 0, Math.PI * 2); x.fill();
+    async init(portraits) {
+      for (const [k, v] of Object.entries(portraits)) {
+        const [lum, mask] = await Promise.all([load(v.lum), load(v.mask)]);
+        this.src[k] = { lum: field(lum), mask: field(mask) };
       }
-    } else if (kind === 'journey') {
-      x.strokeStyle = 'rgba(255,255,255,0.75)'; x.lineCap = 'round';
-      for (let i = 0; i < 40; i++) {
-        const t0 = i / 40, t1 = (i + 1) / 40, w = lerp(150, 14, t0);
-        const p = t => [300 + Math.sin(t * 7.5) * lerp(220, 60, t), 900 - t * 840];
-        x.lineWidth = w; x.beginPath(); x.moveTo(...p(t0)); x.lineTo(...p(t1)); x.stroke();
-      }
-      disc(300, 80, 70, 0.9, 0.2);
-    }
-    x.globalCompositeOperation = 'source-over';
-    const v = x.createRadialGradient(300, 450, 200, 300, 450, 620);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.7)');
-    x.fillStyle = v; x.fillRect(0, 0, GW, GH);
-    const out = makeCanvas(GW, GH), o = out.getContext('2d');
-    o.filter = 'blur(5px)'; o.drawImage(c, 0, 0);
-    // Lift the floor slightly so the whole frame reads as a portrait area
-    const id = o.getImageData(0, 0, GW, GH), d = id.data;
-    for (let i = 0; i < d.length; i += 4) { const val = 0.07 + 0.93 * d[i] / 255; d[i] = d[i + 1] = d[i + 2] = val * 255; }
-    o.putImageData(id, 0, 0);
-    return grayFromCanvas(out);
-  }
-
-  function colorize(src, lut) {
-    const c = makeCanvas(GW, GH), x = c.getContext('2d'), id = x.createImageData(GW, GH), d = id.data;
-    for (let i = 0; i < src.gray.length; i++) {
-      const k = Math.round(src.gray[i] * 255) * 3;
-      d[i * 4] = lut[k]; d[i * 4 + 1] = lut[k + 1]; d[i * 4 + 2] = lut[k + 2]; d[i * 4 + 3] = 255;
-    }
-    x.putImageData(id, 0, 0);
-    return c;
-  }
-
-  class Portrait {
-    constructor(canvas) {
-      this.canvas = canvas; this.ctx = canvas.getContext('2d');
-      this.sources = {}; this.cache = new Map(); this.widths = new Map();
-      this.cur = null; this.prev = null; this.tStart = 0; this.dur = 1100;
-      this.user = []; this.find = 0; this.findTarget = 0; this.hover = null;
-      this.mctx = makeCanvas(1, 1).getContext('2d');
-      this._loop = this._loop.bind(this);
+      // placeholder: a soft, featureless silhouette of the studio portrait, for facets awaiting photography
+      const s = this.src.studio, gl = canvas(s.mask.w, s.mask.h), gx = gl.getContext('2d');
+      gx.filter = 'blur(14px)'; gx.drawImage(s.mask.img, 0, 0); gx.filter = 'none';
+      gx.globalCompositeOperation = 'source-in';
+      const gr = gx.createLinearGradient(0, 0, 0, gl.height); gr.addColorStop(0, '#d8d8d8'); gr.addColorStop(1, '#9a9a9a');
+      gx.fillStyle = gr; gx.fillRect(0, 0, gl.width, gl.height);
+      gx.globalCompositeOperation = 'destination-over'; gx.fillStyle = '#fff'; gx.fillRect(0, 0, gl.width, gl.height);
+      this.src.ghost = { lum: field(gl), mask: s.mask, ghost: true };
     }
 
-    async init(photoSrc, inkSrc) {
-      [this.sources.photo, this.sources.ink] = await Promise.all([loadPhotoSource(photoSrc), loadPhotoSource(inkSrc)]);
-    }
-    source(kind) { return this.sources[kind] || (this.sources[kind] = shapeSource(kind)); }
+    // spec: { key, img, head:[cx,cy,rx,ry]|null, ink:[mid,dark], words:[{t,m}], seed }
+    layout(spec, W, H, dpr) {
+      const ck = `${spec.key}|${W}x${H}@${dpr}`;
+      if (this.cache.has(ck)) return this.cache.get(ck);
+      const src = this.src[spec.img || 'ghost'], L = sample(src.lum), M = sample(src.mask);
+      const head = spec.img ? spec.head : null;
+      const inHead = (u, v) => head && ((u - head[0]) / head[2]) ** 2 + ((v - head[1]) / head[3]) ** 2 < 1;
+      const cw = Math.round(W * dpr), chh = Math.round(H * dpr), R = rng(spec.seed || 7);
+      const words = [];
 
-    resize(w, h) {
-      const dpr = Math.min(window.devicePixelRatio || 1, w < 500 ? 1.5 : 2); // keep phone memory in check
-      if (this.W === w && this.H === h && this.dpr === dpr) return false;
-      this.W = w; this.H = h; this.dpr = dpr;
-      this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
-      this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
-      this.cache.clear();
-      return true;
-    }
-
-    measure(word, font) {
-      const k = font + '|' + word;
-      let v = this.widths.get(k);
-      if (v === undefined) { this.mctx.font = font.replace('$', '100px'); v = this.mctx.measureText(word).width / 100; this.widths.set(k, v); }
-      return v;
-    }
-
-    // spec: { key, kind, stops, pool:[{t,m}], featured:[{t,m}], seed, slots }
-    layout(spec) {
-      if (this.cache.has(spec.key)) { const v = this.cache.get(spec.key); this.cache.delete(spec.key); this.cache.set(spec.key, v); return v; }
-      const { W, H, dpr } = this, R = rng(spec.seed), src = this.source(spec.kind), lut = buildLUT(spec.stops, spec.ink ? 0.85 : 1.2);
-      const tone = (x, y) => src.gray[Math.min(GH - 1, Math.max(0, Math.floor(y / H * GH))) * GW + Math.min(GW - 1, Math.max(0, Math.floor(x / W * GW)))];
-      const det = (x, y) => src.det[Math.min(src.DH - 1, Math.max(0, Math.floor(y / H * src.DH))) * src.DW + Math.min(src.DW - 1, Math.max(0, Math.floor(x / W * src.DW)))];
-      const rects = [];
-      const hits = (r, pad) => rects.some(q => r.x < q.x + q.w + pad && r.x + r.w + pad > q.x && r.y < q.y + q.h + pad && r.y + r.h + pad > q.y);
-
-      // reserve visitor slots so featured words keep clear of them
-      spec.slots.forEach(([sx, sy]) => rects.push({ x: sx * W - W * 0.17, y: sy * H - H * 0.035, w: W * 0.34, h: H * 0.06, reserved: true }));
-
-      // ---- featured words (greedy placement guided by tone + detail) ----
-      // big → small; the two small tiers add a dense mid-layer of words between the headline words and the fine texture
-      const tiers = spec.tiers || [[3, 0.048, 'serif'], [5, 0.032, 'sans'], [8, 0.024, 'sans'], [14, 0.018, 'sans'], [34, 0.0135, 'sans'], [60, 0.0105, 'sans']];
-      const featured = []; let fi = 0; const prot = spec.protect || [];
-      for (const [n, rel, style] of tiers) {
-        for (let i = 0; i < n && fi < spec.featured.length; i++, fi++) {
-          const item = spec.featured[fi], size = H * rel, small = rel < 0.015;
-          const serif = style === 'serif' && !spec.bold;
-          const text = serif ? item.t : item.t.toUpperCase();
-          const font = serif ? `italic 600 $ ${SERIF}` : style === 'serif' ? `900 $ ${DISPLAY}` : `700 $ ${TEX_FONT}`;
-          const w = this.measure(text, font) * size, h = size * (serif ? 0.9 : 0.78);
-          let best = null, bestCost = Infinity;
-          for (let k = 0; k < 160; k++) {
-            const r = { x: W * 0.04 + R() * (W * 0.92 - w), y: H * 0.04 + R() * (H * 0.92 - h), w, h };
-            if (hits(r, size * (small ? 0.4 : 0.25))) continue;
-            let tsum = 0, dsum = 0, tmin = 1;
-            for (let a = 0; a < 5; a++) for (let b = 0; b < 3; b++) {
-              const px = r.x + w * (a + 0.5) / 5, py = r.y + h * (b + 0.5) / 3, t = tone(px, py);
-              tsum += t; tmin = Math.min(tmin, t); dsum += det(px, py);
+      // two full layers, one per word size; the head ellipse decides which one shows where
+      const layer = (rows, region) => {
+        const c = canvas(cw, chh), x = c.getContext('2d');
+        x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
+        const lh = H / rows, fs = lh * 1.2, space = fs * 0.28;
+        const font = wt => `${wt} ${fs}px ${FONT}`;
+        const widths = new Map();
+        const measure = (w, wt) => { const k = wt + w; let v = widths.get(k); if (v === undefined) { x.font = font(wt); v = x.measureText(w).width; widths.set(k, v); } return v; };
+        for (let y = lh * 0.92, row = 0; y < H + lh; y += lh, row++) {
+          let px = -R() * fs * 5;
+          while (px < W) {
+            const pick = spec.words[(R() * spec.words.length) | 0], text = pick.t.toUpperCase();
+            const u0 = Math.min(1, Math.max(0, (px + fs * 2) / W)), v0 = (y - fs * 0.35) / H;
+            const wt = 400 + Math.round(3 * toneOf(L(u0, v0))) * 100;         // 400–700, heavier in shadow
+            const w = measure(text, wt);
+            const u = (px + w / 2) / W;
+            if (M(u, v0) > 0.5 || M(Math.min(1, (px + w) / W), v0) > 0.5 || M(Math.max(0, px / W), v0) > 0.5) {
+              x.font = font(wt); x.fillText(text, px, y);
+              if (M(u, v0) > 0.5 && (region === 'head') === !!inHead(u, v0))
+                words.push({ x: px, y: y - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)) });
             }
-            const tm = tsum / 15;
-            // glow: big words sit in mid tones; ink: big black words sit on the open paper around him
-            if (spec.ink ? tm > 0.22 : (tmin < (small ? 0.02 : 0.035) || tm > 0.62)) continue;
-            if (prot.some(([cx, cy, rx, ry]) => {
-              const nx = Math.max(Math.abs(r.x + w / 2 - cx * W) - w / 2, 0) / (rx * W), ny = Math.max(Math.abs(r.y + h / 2 - cy * H) - h / 2, 0) / (ry * H);
-              return nx * nx + ny * ny < 1;
-            })) continue;
-            const cost = dsum * 2.5 + Math.abs(tm - (spec.ink ? 0.06 : 0.3)) * 1.0 + R() * 0.35;
-            if (cost < bestCost) { bestCost = cost; best = { r, tm }; }
+            px += w + space;
           }
-          if (!best) continue;
-          rects.push(best.r);
-          featured.push({
-            baked: small, t: item.t, m: item.m, text, font, size, x: best.r.x, y: best.r.y + h, w, h: h,
-            col: spec.ink ? [17, 12, 14] : lutColor(lut, Math.min(1, 0.3 + 1.05 * best.tm))
-          });
         }
-      }
+        return c;
+      };
 
-      // ---- texture words, row by row, composited with the tone image ----
-      const tex = makeCanvas(Math.round(W * dpr), Math.round(H * dpr)), tx = tex.getContext('2d');
-      tx.scale(dpr, dpr); tx.fillStyle = '#fff'; tx.textBaseline = 'alphabetic';
-      const fs = Math.max(5, H / 128), lh = fs * 0.98, gap = fs * 0.32, rows = [];
-      const pool = spec.pool;
-      const blockers = rects.filter(r => !r.reserved);
-      for (let y = 0, ri = 0; y < H + lh; y += lh, ri++) {
-        const band = blockers.filter(q => q.y - fs * 0.3 < y + lh && q.y + q.h + fs * 0.3 > y).sort((a, b) => a.x - b.x);
-        const items = []; let x = -R() * fs * 4;
-        while (x < W) {
-          const pick = pool[Math.floor(R() * pool.length)], word = pick.t.toUpperCase();
-          const t = tone(x + fs, y + lh * 0.5);
-          const weight = t > 0.5 ? 700 : t > 0.28 ? 600 : t > 0.15 ? 500 : 400;
-          const font = `${weight} $ ${TEX_FONT}`, w = this.measure(word, font) * fs;
-          const blk = band.find(q => x < q.x + q.w + gap && x + w + gap > q.x);
-          if (blk) { x = blk.x + blk.w + gap * 1.5; continue; }
-          if (t < 0.09 && R() < 0.3) { x += w + gap; continue; } // sparser in the dark
-          tx.font = font.replace('$', fs + 'px');
-          tx.fillText(word, x, y + lh * 0.82);
-          items.push(x, w, pick.m, pick.t);
-          x += w + gap;
-        }
-        rows.push(items);
-      }
-      tx.setTransform(1, 0, 0, 1, 0, 0);
-      tx.globalCompositeOperation = 'source-in';
-      tx.drawImage(colorize(src, lut), 0, 0, tex.width, tex.height);
-      // feather the frame so the portrait dissolves into the page
-      tx.globalCompositeOperation = 'destination-in';
-      const gx = tx.createLinearGradient(0, 0, tex.width, 0);
-      gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(0.1, '#000'); gx.addColorStop(0.9, '#000'); gx.addColorStop(1, 'rgba(0,0,0,0)');
-      tx.fillStyle = gx; tx.fillRect(0, 0, tex.width, tex.height);
-      const gy = tx.createLinearGradient(0, 0, 0, tex.height);
-      gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.06, '#000'); gy.addColorStop(0.93, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)');
-      tx.fillStyle = gy; tx.fillRect(0, 0, tex.width, tex.height);
-      // small featured words are baked into the cached texture (they crossfade with it instead of tweening)
-      tx.globalCompositeOperation = 'source-over'; tx.setTransform(dpr, 0, 0, dpr, 0, 0); tx.textBaseline = 'alphabetic';
-      for (const f of featured) if (f.baked) {
-        tx.font = f.font.replace('$', f.size + 'px'); tx.fillStyle = `rgb(${f.col[0]},${f.col[1]},${f.col[2]})`; tx.fillText(f.text, f.x, f.y);
-      }
-      tx.setTransform(1, 0, 0, 1, 0, 0);
+      const tex = canvas(cw, chh), tx = tex.getContext('2d');
+      const body = layer(head ? 140 : 150, 'body');
+      if (head) {
+        const fine = layer(200, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
+        const ell = (ctx, op) => {
+          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = op; ctx.fillStyle = '#000';
+          ctx.beginPath(); ctx.ellipse(head[0] * cw, head[1] * chh, head[2] * cw, head[3] * chh, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        };
+        ell(fx, 'destination-in'); ell(bx, 'destination-out');
+        tx.drawImage(body, 0, 0); tx.drawImage(fine, 0, 0);
+      } else tx.drawImage(body, 0, 0);
 
-      const out = { key: spec.key, tex, rows, lh, fs, featured, live: featured.filter(f => !f.baked), slots: spec.slots, code: spec.code || null, accent: spec.accent || '#ffb000', lut, ink: !!spec.ink, bold: !!spec.bold };
-      this.cache.set(spec.key, out);
-      while (this.cache.size > 10) this.cache.delete(this.cache.keys().next().value);
+      // colour every letter pixel from the tone-mapped photograph, then cut to the silhouette
+      tx.globalCompositeOperation = 'source-in'; tx.drawImage(this.paint(spec, src), 0, 0, cw, chh);
+      tx.globalCompositeOperation = 'destination-in'; tx.drawImage(src.mask.img, 0, 0, cw, chh);
+      tx.globalCompositeOperation = 'source-over';
+
+      const out = { key: spec.key, tex, words, W, H, dpr, slots: new Map(), used: new Set() };
+      this.cache.set(ck, out);
+      if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;
     }
 
-    show(spec, instant) {
-      const next = this.layout(spec);
-      if (this.cur && this.cur.key === next.key) return;
-      const before = new Set(this.visibleUser());
-      this.prev = instant ? null : this.cur; this.cur = next; this.tStart = performance.now();
-      // words already on screen glide to their new slot; words that only belong to this facet fade in
-      this.user.forEach(u => { u.from = before.has(u) ? u.pos : null; u.fadeIn = !before.has(u); });
-      this.kick();
-    }
-
-    // A facet portrait shows only the visitor words tagged with that facet; hero and finale show them all.
-    // The newest words win when there are more words than slots.
-    visibleUser() {
-      if (!this.cur) return [];
-      const code = this.cur.code;
-      return this.user.filter(u => !code || u.facets.includes(code)).slice(-this.cur.slots.length);
-    }
-    slotFor(u) {
-      const v = this.visibleUser(), i = v.indexOf(u); if (i < 0) return null;
-      const s = this.cur.slots[i];
-      return { x: s[0] * this.W, y: s[1] * this.H, size: this.H * (v.length > 6 ? 0.042 : 0.05) };
-    }
-    // stage words before they arrive (so their slots are known for the flight), then land them one by one
-    stageUser(words, m) {
-      const out = words.map(w => ({ t: w.t, facets: w.facets, m, born: Infinity, pos: null, from: null }));
-      this.user.push(...out); return out;
-    }
-    landUser(u) { u.born = performance.now(); this.kick(); }
-
-    setFind(on) { this.findTarget = on ? 1 : 0; this.kick(); }
-    setHover(h) { if ((h && h.t) !== (this.hover && this.hover.t) || (h && h.x) !== (this.hover && this.hover.x)) { this.hover = h; this.kick(); } }
-
-    hit(px, py) {
-      const L = this.cur; if (!L) return null;
-      for (const u of this.visibleUser()) if (u.box && px >= u.box.x && px <= u.box.x + u.box.w && py >= u.box.y && py <= u.box.y + u.box.h) return { t: u.t, m: u.m, box: u.box, mine: true };
-      for (const f of L.featured) if (px >= f.x - 4 && px <= f.x + f.w + 4 && py >= f.y - f.h - 4 && py <= f.y + 6)
-        return { t: f.t, m: f.m, box: { x: f.x, y: f.y - f.h, w: f.w, h: f.h }, f };
-      const ri = Math.floor(py / L.lh), row = L.rows[ri];
-      if (row) for (let i = 0; i < row.length; i += 4) if (px >= row[i] && px <= row[i] + row[i + 1])
-        return { t: row[i + 3], m: row[i + 2], x: row[i], box: { x: row[i], y: ri * L.lh, w: row[i + 1], h: L.lh }, small: true };
-      return null;
-    }
-
-    kick() { if (!this.raf) this.raf = requestAnimationFrame(this._loop); }
-
-    _loop(now) {
-      this.raf = 0;
-      const animating = this._draw(now);
-      if (animating) this.kick();
-    }
-
-    _draw(now) {
-      const { ctx, W, H, dpr, cur, prev } = this; if (!cur) return false;
-      let anim = false;
-      const raw = Math.min(1, (now - this.tStart) / this.dur), p = ease(raw);
-      if (raw < 1) anim = true;
-      this.find += (this.findTarget - this.find) * 0.14;
-      if (Math.abs(this.findTarget - this.find) > 0.002) anim = true; else this.find = this.findTarget;
-      const dim = 1 - 0.8 * this.find;
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      // texture crossfade, with a gentle zoom on the incoming state
-      if (prev && raw < 1) {
-        ctx.globalAlpha = dim * (1 - p); ctx.drawImage(prev.tex, 0, 0, W, H);
-        const s = 1.04 - 0.04 * p;
-        ctx.globalAlpha = dim * p; ctx.drawImage(cur.tex, W * (1 - s) / 2, H * (1 - s) / 2, W * s, H * s);
-      } else { ctx.globalAlpha = dim; ctx.drawImage(cur.tex, 0, 0, W, H); }
-
-      // featured words tween between states
-      ctx.textBaseline = 'alphabetic';
-      const prevMap = new Map(); if (prev && raw < 1) prev.live.forEach(f => prevMap.set(f.t, f));
-      const draw = (f, x, y, size, col, a) => {
-        if (a <= 0.01) return;
-        ctx.globalAlpha = a * (1 - 0.82 * this.find);
-        ctx.font = f.font.replace('$', size + 'px');
-        ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
-        ctx.fillText(f.text, x, y);
-      };
-      for (const f of cur.live) {
-        const o = prevMap.get(f.t);
-        if (o) { prevMap.delete(f.t); draw(f, lerp(o.x, f.x, p), lerp(o.y, f.y, p), lerp(o.size, f.size, p), o.col.map((c, i) => lerp(c, f.col[i], p)), 1); }
-        else draw(f, f.x, f.y, f.size, f.col, prev && raw < 1 ? p : 1);
+    paint(spec, src) {
+      const key = 'paint|' + spec.key; if (this.cache.has(key)) return this.cache.get(key);
+      const f = src.lum, c = canvas(f.w, f.h), x = c.getContext('2d'), id = x.createImageData(f.w, f.h);
+      const inks = spec.inks || [spec.ink];
+      const ramps = inks.map(i => ramp(i[0], i[1]));
+      for (let i = 0; i < f.d.length; i++) {
+        let t = toneOf(f.d[i]); if (src.ghost) t = 0.05 + t * 0.35;
+        // the closing portrait drifts through every facet's ink from top to bottom
+        const y = ((i / f.w) | 0) / f.h, k = Math.min(ramps.length - 1, (y * ramps.length) | 0);
+        const col = ramps[k](t);
+        id.data[i * 4] = col[0]; id.data[i * 4 + 1] = col[1]; id.data[i * 4 + 2] = col[2]; id.data[i * 4 + 3] = 255;
       }
-      prevMap.forEach(o => draw(o, o.x, o.y, o.size, o.col, 1 - p));
+      x.putImageData(id, 0, 0);
+      if (ramps.length > 1) { const b = canvas(f.w, f.h), bx = b.getContext('2d'); bx.filter = 'blur(40px)'; bx.drawImage(c, 0, 0); bx.filter = 'none';
+        // soften the bands between inks but keep detail from the sharp version
+        bx.globalAlpha = 0.6; bx.drawImage(c, 0, 0); this.cache.set(key, b); return b; }
+      this.cache.set(key, c); return c;
+    }
 
-      // hover highlight
-      if (this.hover && this.hover.box && !this.hover.mine) {
-        const b = this.hover.box; ctx.globalAlpha = 1;
-        ctx.strokeStyle = cur.ink ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
-        ctx.strokeRect(b.x - 3, b.y - 2, b.w + 6, b.h + 4);
-        if (this.hover.small) {
-          ctx.font = `700 ${cur.fs * 2.2}px ${TEX_FONT}`; ctx.fillStyle = cur.ink ? '#000' : '#fff';
-          ctx.fillText(this.hover.t.toUpperCase(), b.x, b.y - 6);
+    // Reserve a word position for a visitor's word: a readable body word of similar length in mid tones.
+    // The texture word underneath is erased so the visitor's word takes its place in the fabric.
+    slotFor(L, id, text) {
+      if (L.slots.has(id)) return L.slots.get(id);
+      const n = text.length, R = rng(id.length * 131 + L.slots.size * 977);
+      const cand = L.words.filter((w, i) => !L.used.has(i) && w.region === 'body' && w.tone > 0.3 && w.tone < 0.85 && Math.abs(w.t.length - n) <= 3 && w.y > L.H * 0.12 && w.y < L.H * 0.9);
+      const pool = cand.length ? cand : L.words.filter((w, i) => !L.used.has(i));
+      if (!pool.length) return null;
+      // spread visitor words apart from each other
+      let best = null, bestD = -1;
+      for (let k = 0; k < 24; k++) {
+        const w = pool[(R() * pool.length) | 0];
+        let d = 1e9; L.slots.forEach(s => { d = Math.min(d, Math.hypot(s.x - w.x, s.y - w.y)); });
+        if (d > bestD) { bestD = d; best = w; }
+      }
+      L.used.add(L.words.indexOf(best));
+      const ctx = L.tex.getContext('2d');
+      ctx.clearRect((best.x - 1) * L.dpr, (best.y - best.fs * 0.1) * L.dpr, (best.w + 2) * L.dpr, best.fs * 1.08 * L.dpr);
+      const slot = { ...best, text };
+      L.slots.set(id, slot);
+      return slot;
+    }
+
+    hit(L, x, y, pad = 0) {
+      let best = null, bd = Infinity;
+      for (const w of L.words) {
+        if (x >= w.x - pad && x <= w.x + w.w + pad && y >= w.y - pad && y <= w.y + w.h + pad) {
+          const d = Math.abs(x - (w.x + w.w / 2)) + Math.abs(y - (w.y + w.h / 2)) * 2;
+          if (d < bd) { bd = d; best = w; }
         }
       }
-
-      // visitor words — larger, in their chosen colour, knocked out of the texture
-      const ink = cur.ink;
-      const uFont = sz => cur.bold ? `900 ${sz * 0.86}px ${DISPLAY}` : `italic 700 ${sz}px ${SERIF}`;
-      const uText = t => cur.bold ? t.toUpperCase() : t;
-      const accent = cur.accent;
-      this.user.forEach(u => { u.box = null; });
-      for (const u of this.visibleUser()) {
-        const tgt = this.slotFor(u);
-        let x = tgt.x, y = tgt.y;
-        if (u.from && raw < 1) { x = lerp(u.from.x, tgt.x, p); y = lerp(u.from.y, tgt.y, p); }
-        u.pos = { x: tgt.x, y: tgt.y };
-        if (!isFinite(u.born)) continue; // still in flight
-        const age = now - u.born; if (age < 0) { anim = true; continue; }
-        const fade = u.fadeIn && raw < 1 ? p : 1;
-        const land = Math.min(1, age / 900); if (land < 1) anim = true;
-        const sc = 1 + 0.35 * Math.pow(1 - land, 3);
-        const size = tgt.size * sc;
-        ctx.font = uFont(size);
-        const label = uText(u.t), w = ctx.measureText(label).width;
-        x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
-        u.box = { x: x - w / 2, y: y - size * 0.75, w, h: size };
-        ctx.globalAlpha = Math.min(1, land * 2) * fade;
-        ctx.textAlign = 'center'; ctx.lineJoin = 'round';
-        if (land < 1) { // landing ring
-          ctx.strokeStyle = accent; ctx.globalAlpha = 1 - land; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.ellipse(x, y - size * 0.3, w * 0.5 + 60 * land + 10, size * 0.6 + 40 * land, 0, 0, Math.PI * 2); ctx.stroke();
-          ctx.globalAlpha = Math.min(1, land * 2);
-        }
-        if (this.find > 0.01) {
-          const pulse = 0.5 + 0.5 * Math.sin(now / 260); anim = true;
-          ctx.save(); ctx.globalAlpha = this.find * (0.35 + 0.35 * pulse);
-          ctx.shadowColor = ink ? 'transparent' : accent; ctx.shadowBlur = 40;
-          ctx.fillStyle = ink ? '#000' : accent; ctx.fillRect(x - w / 2 - 12, y - size * 0.82, w + 24, size * 1.12);
-          ctx.restore();
-          ctx.globalAlpha = this.find;
-          ctx.font = `600 11px ${TEX_FONT}`; ctx.fillStyle = ink ? '#000' : '#fff';
-          ctx.fillText('YOUR WORD', x, y - size * 0.95);
-          ctx.font = uFont(size); ctx.globalAlpha = 1;
-        }
-        if (ink) { // pop-art sticker: accent fill, heavy black outline
-          ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#000'; ctx.strokeText(label, x, y);
-          ctx.fillStyle = accent; ctx.fillText(label, x, y);
-        } else {
-          ctx.lineWidth = size * 0.22; ctx.strokeStyle = 'rgba(11,7,16,0.92)';
-          ctx.strokeText(label, x, y);
-          ctx.shadowColor = accent; ctx.shadowBlur = 18;
-          ctx.fillStyle = this.find > 0.5 ? '#fff' : accent; ctx.fillText(label, x, y);
-        }
-        ctx.shadowBlur = 0;
-        if (this.hover && this.hover.mine && this.hover.t === u.t) {
-          ctx.fillStyle = accent; ctx.fillRect(x - w / 2, y + size * 0.14, w, 2);
-        }
-        ctx.textAlign = 'start';
-      }
-      ctx.globalAlpha = 1;
-      return anim;
+      return best;
     }
   }
 
-  window.Portrait = Portrait;
+  window.WordPortraits = WordPortraits;
+  window.WP_PAPER = PAPER;
+  window.WP_FONT = FONT;
 })();

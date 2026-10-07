@@ -3,151 +3,116 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dr. Pawan Munjal — A Portrait in Words</title>
-<meta name="description" content="Prototype: a birthday tribute portrait built from everyone's words.">
+<title>Dr. Pawan Munjal · A Portrait in Words</title>
+<meta name="description" content="A birthday tribute: a portrait of Dr. Pawan Munjal made from everyone's words.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..900&family=Barlow+Condensed:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400..700&family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body data-state="hero">
+<body>
 
 <header class="top">
-  <a class="mark" href="#top" aria-label="Back to top"><span class="mark__pm">PM</span><span class="mark__t">A portrait in words</span></a>
-  <div class="top__r">
-    <div class="look" role="group" aria-label="Visual direction (prototype review)"><span>Look</span><button type="button" data-look="poster">Poster</button><button type="button" data-look="glow">Glow</button></div>
-    <button class="btn btn--ghost js-write" type="button">Write a message</button>
-  </div>
+  <a class="mark" href="#top" aria-label="Back to the beginning">Dr. Pawan Munjal <span>A portrait in words</span></a>
+  <button class="link js-write" type="button">Write a message</button>
 </header>
 
 <nav class="rail" aria-label="Facets"></nav>
 
-<main class="story" id="top">
-  <div class="stage" aria-hidden="false">
-    <div class="aura"></div>
-    <div class="pbox">
-      <canvas class="portrait" aria-label="A portrait of Dr. Pawan Munjal made from words. Tap a word to read the message behind it."></canvas>
-      <div class="ph-tag" aria-hidden="true"><span class="ph-dot"></span>Placeholder composition · final client photograph will form this portrait</div>
-      <div class="pbox__corner pbox__corner--tl"></div><div class="pbox__corner pbox__corner--br"></div>
+<main id="top">
+  <div class="stage">
+    <div class="frame">
+      <canvas class="portrait" aria-label="A portrait of Dr. Pawan Munjal made of words. Hover or tap a word to read the message behind it."></canvas>
+      <div class="loupe" aria-hidden="true"></div>
     </div>
-    <div class="loading"><span>Gathering words…</span></div>
+    <p class="loading">Gathering words…</p>
   </div>
 
   <div class="flow">
-    <section class="hero" data-state="hero">
-      <div class="hero__copy">
-        <p class="eyebrow">A birthday tribute · Prototype</p>
-        <h1 class="hero__title">How do <span class="nb">you see</span> <em>Dr.&nbsp;Pawan Munjal?</em></h1>
-        <p class="hero__sub">Add your words to his story.</p>
-        <div class="hero__cta">
-          <button class="btn btn--primary js-write" type="button">Write a message</button>
-          <span class="hero__count"><b class="js-count">2,418</b> voices so far</span>
-        </div>
+    <section class="sec hero" data-state="hero">
+      <div class="note">
+        <p class="eyebrow">A birthday tribute</p>
+        <h1>How do you see <em>Dr.&nbsp;Pawan Munjal?</em></h1>
+        <p class="lede">Every word in this portrait comes from someone whose life he has touched. Add yours.</p>
+        <button class="btn js-write" type="button">Write a message</button>
+        <p class="count"><span class="js-count">2,418</span> voices so far</p>
       </div>
-      <a class="scrollcue" href="#facet-0"><span>Scroll the story</span><i></i></a>
+      <a class="cue" href="#facet-0">Scroll through his life</a>
     </section>
 
     <div class="chapters"></div>
 
-    <section class="finale" data-state="final" id="final">
-      <div class="finale__copy card">
-        <p class="eyebrow">Seven facets · One portrait</p>
-        <h2 class="finale__title">Many facets.<br><em>One remarkable life.</em></h2>
-        <p class="finale__sub">A collective portrait made from thousands of voices.</p>
-        <div class="finale__chips"></div>
-        <div class="finale__cta">
-          <button class="btn btn--primary js-write" type="button">Add your words</button>
-          <button class="btn btn--ghost js-find-inline" type="button" hidden>Find my words</button>
-          <button class="btn btn--ghost" type="button" data-go="board">Read every message ↓</button>
+    <section class="sec final" data-state="final" id="final">
+      <div class="note">
+        <p class="eyebrow">Seven facets · one portrait</p>
+        <h2>Many facets.<br><em>One remarkable life.</em></h2>
+        <p class="lede">A collective portrait made from thousands of voices.</p>
+        <div class="row">
+          <button class="btn js-write" type="button">Add your words</button>
+          <button class="link js-find" type="button" hidden>Find my words</button>
         </div>
+        <a class="link" href="#letters">Read the messages ↓</a>
       </div>
     </section>
   </div>
 </main>
 
-<section class="board" id="board" aria-labelledby="board-title">
-  <div class="board__head">
-    <div class="board__intro">
-      <p class="eyebrow">The message board</p>
-      <h2 id="board-title" class="board__title">Every voice,<br><em>in full.</em></h2>
+<section class="letters" id="letters" aria-labelledby="letters-title">
+  <div class="letters__head">
+    <p class="eyebrow">The messages</p>
+    <h2 id="letters-title">In their own words</h2>
+    <p class="lede">Every message, in full. The words you see in the portrait are underlined.</p>
+    <div class="letters__tools">
+      <div class="filters" role="group" aria-label="Filter by facet"></div>
+      <label class="search"><span class="sr">Search messages</span><input type="search" placeholder="Search words or names"></label>
     </div>
-    <div class="board__aside">
-      <p class="board__sub">The portrait is built from these messages. The highlighted words are the ones that appear in it.</p>
-      <p class="board__stats"><b class="js-bcount">0</b> messages <span>·</span> <b>7</b> facets</p>
-    </div>
   </div>
-  <div class="board__tools">
-    <div class="board__filters" role="group" aria-label="Filter by facet"></div>
-    <label class="board__search"><span class="sr">Search messages</span><input type="search" placeholder="Search words or names"></label>
-  </div>
-  <div class="board__grid" aria-live="polite"></div>
-  <p class="board__empty" hidden>No messages match yet — be the first to say it.</p>
-  <div class="board__more">
-    <button class="btn btn--ghost js-more" type="button">Show more messages</button>
-    <button class="btn btn--primary js-write" type="button">Add your message</button>
-  </div>
+  <div class="letters__body"></div>
+  <p class="letters__empty" hidden>No messages match yet.</p>
+  <button class="link js-more" type="button">Show more</button>
 </section>
-<footer class="foot">Interactive prototype · demo data · all messages fictional</footer>
+<footer class="foot">Prototype · demo messages are fictional</footer>
 
-<button class="findpill" type="button" hidden><span class="findpill__dot"></span><span class="findpill__label">Find my words</span></button>
+<button class="findpill js-find" type="button" hidden>Find my words</button>
 
 <div class="toast" role="status" hidden>
-  <p class="toast__t">Your words are now part of his story.</p>
+  <p class="toast__t">Your words are now part of his portrait.</p>
   <div class="toast__w"></div>
-  <p class="toast__s">Your full message will appear once approved.</p>
-  <div class="toast__a"><button class="btn btn--small btn--primary js-find-toast" type="button">Find my words</button><button class="btn btn--small btn--ghost js-continue" type="button">Continue the story ↓</button></div>
+  <p class="toast__s">Your message will appear in full once it has been approved.</p>
+  <div class="toast__a"><button class="link js-find-toast" type="button">Find my words</button><button class="link js-close-toast" type="button">Close</button></div>
 </div>
 
-<!-- Composer -->
 <div class="composer" hidden>
-  <div class="composer__backdrop"></div>
-  <div class="composer__panel" role="dialog" aria-modal="true" aria-labelledby="composer-title">
-    <button class="x js-close-composer" type="button" aria-label="Close">×</button>
-
-    <form class="step step--write" novalidate>
-      <p class="eyebrow">Step 1 of 2</p>
-      <h2 id="composer-title" class="composer__title">What has he meant to you?</h2>
-      <label class="field-l">
-        <span>Your message</span>
-        <textarea name="msg" rows="4" maxlength="400" placeholder="A memory, a lesson, a quality you admire…" required></textarea>
-        <span class="hint"><span class="js-len">0</span>/400</span>
-      </label>
-      <div class="row2">
-        <label class="field-l"><span>Name <i>(optional)</i></span><input name="name" autocomplete="name" placeholder="Your name"></label>
-        <label class="field-l"><span>Relationship / organisation <i>(optional)</i></span><input name="rel" placeholder="e.g. Colleague, Hero MotoCorp"></label>
-      </div>
-      <div class="composer__foot">
-        <button class="btn btn--primary" type="submit">Find my words →</button>
-        <button class="linkbtn js-sample" type="button">Try a sample message</button>
-      </div>
-    </form>
-
-    <div class="step step--words" hidden>
-      <p class="eyebrow">Step 2 of 2</p>
-      <h2 class="composer__title">Your words</h2>
-      <p class="composer__lede js-words-lede"></p>
-      <blockquote class="preview"></blockquote>
-      <div class="wgroups"></div>
-      <div class="composer__foot">
-        <button class="btn btn--primary js-confirm" type="button">Add my words to his portrait</button>
-        <button class="linkbtn js-back" type="button">← Edit message</button>
-      </div>
-      <p class="mod-note">Your words appear instantly. Your full message is shown once it has been approved.</p>
+  <div class="scrim js-close"></div>
+  <form class="panel" role="dialog" aria-modal="true" aria-labelledby="composer-title" novalidate>
+    <button class="x js-close" type="button" aria-label="Close">×</button>
+    <p class="eyebrow">Your message</p>
+    <h2 id="composer-title">What has he meant to you?</h2>
+    <div class="msgwrap">
+      <textarea name="msg" rows="5" maxlength="400" placeholder="A memory, a lesson, a quality you admire…" required></textarea>
+      <div class="msgpreview" aria-hidden="true"></div>
     </div>
-  </div>
+    <div class="two">
+      <label><span>Name <i>(optional)</i></span><input name="name" autocomplete="name"></label>
+      <label><span>Relationship or organisation <i>(optional)</i></span><input name="rel"></label>
+    </div>
+    <div class="panel__foot">
+      <button class="btn" type="submit">Add to his portrait</button>
+      <button class="link js-sample" type="button">Use a sample message</button>
+    </div>
+    <p class="fine">Your words join the portrait straight away. Your full message appears once approved.</p>
+  </form>
 </div>
 
-<!-- Word detail sheet -->
 <div class="sheet" hidden>
-  <div class="sheet__backdrop"></div>
+  <div class="scrim js-close-sheet"></div>
   <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-word">
-    <div class="sheet__grip"></div>
     <button class="x js-close-sheet" type="button" aria-label="Close">×</button>
     <div class="sheet__body"></div>
   </div>
 </div>
 
-<script src="js/portrait-data.js"></script>
+<script src="js/portraits.js"></script>
 <script src="js/data.js"></script>
 <script src="js/portrait.js"></script>
 <script src="js/app.js"></script>
