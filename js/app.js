@@ -390,10 +390,15 @@
       const rect = cv.getBoundingClientRect(), sc = rect.width / W;
       const entries = ex.words.map(w => ({ id: `${mi}:${w}`, t: w, facets: facetsOf(w, ex.fallback), m: mi, arrived: {}, landed: false }));
       entries.forEach(v => visitor.push(v));
-      let left = entries.length;
-      entries.forEach((v, i) => {
+      // each word lifts out of the text, then travels along its own hairline arc into the portrait: the arcs bow the
+      // same way and leave one after another, so the words read as one deliberate sweep rather than a scatter
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flight'); document.body.appendChild(svg);
+      const n = entries.length, stagger = Math.min(240, 1600 / Math.max(1, n));
+      const LIFT = REDUCED.matches ? 0 : 420, TRAVEL = REDUCED.matches ? 300 : 1500;
+      const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const flights = entries.map((v, i) => {
         const srcEl = preview.querySelector(`mark[data-w="${v.t}"]`) || preview;
-        const sr = srcEl.getBoundingClientRect();
+        const sr = srcEl.getBoundingClientRect(), cs = getComputedStyle(srcEl), fs0 = parseFloat(cs.fontSize);
         const inHere = !here || v.facets.includes(here);
         let tx, ty, size, railBtn = null;
         if (inHere) {
@@ -403,35 +408,62 @@
           railBtn = rail.querySelector(`[data-go="${CODES.indexOf(v.facets[0])}"]`);
           const r = railBtn.getBoundingClientRect(); tx = r.right - 6; ty = r.top + r.height / 2; size = 10;
         }
-        // the flyer starts as the very word on the page (same font, size, place), then becomes a portrait word
-        const cs = getComputedStyle(srcEl);
-        const fl = document.createElement('span');
-        fl.className = 'flyer'; fl.textContent = srcEl.textContent;
-        Object.assign(fl.style, { left: sr.left + sr.width / 2 + 'px', top: sr.top + sr.height / 2 + 'px', font: cs.font, color: getComputedStyle(srcEl).color });
-        document.body.appendChild(fl);
-        const delay = i * 90;
-        setTimeout(() => srcEl.classList.add('gone'), delay);
-        const dx = tx - (sr.left + sr.width / 2), dy = ty - (sr.top + sr.height / 2), s1 = size / parseFloat(cs.fontSize);
-        const lift = Math.min(80, Math.abs(dx) * 0.12 + 30);
-        fl.animate([
-          { transform: 'translate(-50%,-50%)', opacity: 1, letterSpacing: '0em' },
-          { transform: `translate(-50%,-50%) translate(${dx * 0.35}px, ${dy * 0.35 - lift}px) scale(${(1 + s1) / 2})`, opacity: 1, offset: 0.45 },
-          { transform: `translate(-50%,-50%) translate(${dx}px, ${dy}px) scale(${s1})`, opacity: inHere ? 1 : 0 }
-        ], { duration: 1150, delay, easing: 'cubic-bezier(.55,0,.25,1)', fill: 'forwards' });
-        // swap to the portrait's own letterforms just before landing
-        setTimeout(() => { fl.textContent = v.t.toUpperCase(); fl.classList.add('landing'); }, delay + 700);
-        setTimeout(() => {
-          v.landed = true; if (inHere) v.arrived[s] = performance.now();
-          if (railBtn) { railBtn.classList.remove('ping'); void railBtn.offsetWidth; railBtn.classList.add('ping'); }
-          kick();
-          fl.animate([{ opacity: inHere ? 1 : 0 }, { opacity: 0 }], { duration: 220, fill: 'forwards' }).onfinish = () => fl.remove();
-          if (--left === 0) {
-            done(entries);
-            closeComposer();
-            setTimeout(() => { form.reset(); preview.innerHTML = ''; found.textContent = ''; composer.classList.remove('sending', 'emptied'); }, 520);
-          }
-        }, delay + 1150);
+        // the flyer starts as the very word on the page and turns into the portrait's lettering on the way
+        const fl = document.createElement('span'); fl.className = 'flyer';
+        fl.innerHTML = `<span class="f-a"></span><span class="f-b"></span>`;
+        fl.firstChild.textContent = srcEl.textContent; fl.firstChild.style.font = cs.font;
+        fl.lastChild.textContent = v.t.toUpperCase(); fl.lastChild.style.fontSize = fs0 + 'px';
+        fl.style.color = cs.color; document.body.appendChild(fl);
+        // the arc: bowed upwards (or outwards when the trip is mostly vertical), a little wider for each word
+        const sx = sr.left + sr.width / 2, sy = sr.top + sr.height / 2 - 10, dx = tx - sx, dy = ty - sy, dl = Math.hypot(dx, dy) || 1;
+        let nx = -dy / dl, ny = dx / dl; if (Math.abs(ny) > 0.2 ? ny > 0 : nx > 0) { nx = -nx; ny = -ny; }
+        const k = Math.min(190, dl * 0.3) * (0.8 + 0.2 * (i % 3));
+        const P = [[sx, sy], [sx + dx * 0.2 + nx * k, sy + dy * 0.2 + ny * k], [sx + dx * 0.8 + nx * k * 0.7, sy + dy * 0.8 + ny * k * 0.7], [tx, ty]];
+        const at = t => { const u = 1 - t; return [0, 1].map(j => u * u * u * P[0][j] + 3 * u * u * t * P[1][j] + 3 * u * t * t * P[2][j] + t * t * t * P[3][j]); };
+        const pts = [], len = [0];   // arc-length table, so the word moves at an even pace along the curve
+        for (let j = 0; j <= 64; j++) { pts.push(at(j / 64)); if (j) len.push(len[j - 1] + Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1])); }
+        const total = len[64], byLen = d => { let j = 1; while (j < 64 && len[j] < d) j++; const f = (d - len[j - 1]) / ((len[j] - len[j - 1]) || 1); return [pts[j - 1][0] + (pts[j][0] - pts[j - 1][0]) * f, pts[j - 1][1] + (pts[j][1] - pts[j - 1][1]) * f]; };
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        // every word takes its place over the text at once, then waits its turn to leave
+        fl.style.transform = `translate(${sx}px, ${sy + 10}px) translate(-50%,-50%)`; srcEl.classList.add('gone');
+        path.setAttribute('d', `M${P[0]}C${P[1]} ${P[2]} ${P[3]}`); path.style.strokeDasharray = `0 ${total * 2}`; svg.appendChild(path);
+        return { v, i, fl, path, total, byLen, s0: sx, y0: sy + 10, s1: size / fs0, inHere, railBtn, t0: i * stagger, done: false };
       });
+      const start = performance.now(); let left = n;
+      const step = now => {
+        const T = now - start;
+        for (const f of flights) {
+          if (f.done) continue;
+          const t = T - f.t0; if (t < 0) continue;
+          if (t < LIFT) {   // the word rises gently out of the line
+            const l = 1 - Math.pow(1 - t / LIFT, 3);
+            f.fl.style.transform = `translate(${f.s0}px, ${f.y0 - 10 * l}px) translate(-50%,-50%) scale(${1 + 0.06 * l})`;
+            continue;
+          }
+          const r = Math.min(1, (t - LIFT) / TRAVEL), m = ease(r), d = m * f.total, [x, y] = f.byLen(d);
+          const sc1 = 1.06 + (f.s1 - 1.06) * m, swap = Math.min(1, Math.max(0, (m - 0.4) / 0.3));
+          f.fl.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%) scale(${sc1})`;
+          f.fl.firstChild.style.opacity = 1 - swap; f.fl.lastChild.style.opacity = swap;
+          if (!f.inHere) f.fl.style.opacity = 1 - Math.max(0, (m - 0.7) / 0.3);
+          // a short tail of the hairline trails the word, then lets go of it
+          const tail = f.total * 0.3, a0 = Math.max(0, d - tail);
+          f.path.style.strokeDasharray = `0 ${a0} ${d - a0} ${f.total * 2}`;
+          f.path.style.opacity = Math.min(1, r * 6) * (1 - Math.max(0, (r - 0.75) / 0.25));
+          if (r >= 1) {
+            f.done = true; f.path.remove();
+            const v = f.v; v.landed = true; if (f.inHere) v.arrived[s] = performance.now();
+            if (f.railBtn) { f.railBtn.classList.remove('ping'); void f.railBtn.offsetWidth; f.railBtn.classList.add('ping'); }
+            kick();
+            f.fl.animate([{ opacity: f.inHere ? 1 : 0 }, { opacity: 0 }], { duration: 320, fill: 'forwards' }).onfinish = () => f.fl.remove();
+            if (--left === 0) {
+              svg.remove(); done(entries); closeComposer();
+              setTimeout(() => { form.reset(); preview.innerHTML = ''; found.textContent = ''; composer.classList.remove('sending', 'emptied'); }, 520);
+            }
+          }
+        }
+        if (left > 0) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
       // the rest of the message dissolves as its words leave
       setTimeout(() => composer.classList.add('emptied'), 250);
     }, 380);
