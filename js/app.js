@@ -210,19 +210,20 @@
       // shuffle: every word of one portrait travels into the next and becomes one of its words
       const A = layoutFor(b.a), B = layoutFor(b.b);
       // the scenes simply crossfade behind the shuffling words
-      if (A.scene) { ctx.globalAlpha = 1 - b.e; ctx.drawImage(A.scene, 0, 0, W, H); }
-      if (B.scene) { ctx.globalAlpha = b.e; ctx.drawImage(B.scene, 0, 0, W, H); }
-      ctx.globalAlpha = 0.09 * (1 - b.e); ctx.drawImage(A.shadow, A.ox + A.W * 0.012, A.oy + A.H * 0.014, A.W, A.H);
-      ctx.globalAlpha = 0.09 * b.e; ctx.drawImage(B.shadow, B.ox + B.W * 0.012, B.oy + B.H * 0.014, B.W, B.H);
+      const sdim = 1 - 0.7 * find;
+      if (A.scene) { ctx.globalAlpha = (1 - b.e) * sdim; ctx.drawImage(A.scene, 0, 0, W, H); }
+      if (B.scene) { ctx.globalAlpha = b.e * sdim; ctx.drawImage(B.scene, 0, 0, W, H); }
+      ctx.globalAlpha = 0.09 * (1 - b.e) * (1 - find); ctx.drawImage(A.shadow, A.ox + A.W * 0.012, A.oy + A.H * 0.014, A.W, A.H);
+      ctx.globalAlpha = 0.09 * b.e * (1 - find); ctx.drawImage(B.shadow, B.ox + B.W * 0.012, B.oy + B.H * 0.014, B.W, B.H);
       ctx.globalAlpha = 1;
-      // the travelling words are cut from the finished portraits, so at rest they cover them exactly: the portraits
-      // fade underneath (only edge details show the difference) and the words simply begin to drift, with no visible switch
-      const inA = 1 - smooth(0, 0.06, b.e), inB = smooth(0.94, 1, b.e);
-      if (inA > 0.002) { ctx.globalAlpha = inA; ctx.drawImage(A.tex, A.ox, A.oy, A.W, A.H); }
-      if (inB > 0.002) { ctx.globalAlpha = inB; ctx.drawImage(B.tex, B.ox, B.oy, B.W, B.H); }
-      ctx.globalAlpha = 1;
-      wp.drawShuffle(ctx, A, B, Math.min(1, Math.max(0, (b.e - 0.05) / 0.9)), dpr);
-      const fadeA = Math.max(0, 1 - b.e * 4), fadeB = Math.max(0, b.e * 4 - 3);   // visitor words step aside during the shuffle
+      // the travelling words are cut from the finished portraits and cover them exactly, so the hand-over at either
+      // end is invisible: the portrait simply begins to loosen into its words as you scroll, and gathers back the same way
+      const dim = 1 - 0.78 * find;
+      wp.drawShuffle(ctx, A, B, Math.min(1, Math.max(0, (b.e - 0.02) / 0.96)), dpr, dim);
+      // visitor words step aside during the shuffle, unless you are finding them: then they hold their place,
+      // highlighted, while the portrait dims and reshuffles around them (handing over to the next portrait mid-way)
+      const mid = smooth(0.4, 0.6, b.e);
+      const fadeA = Math.max(0, 1 - b.e * 4, find * (1 - mid)), fadeB = Math.max(0, b.e * 4 - 3, find * mid);
       anim = drawPortrait(b.a, fadeA, 0, 1, now, true) || anim;
       anim = drawPortrait(b.b, fadeB, 0, 1, now, true) || anim;
     } else if (b.b !== b.a) {
@@ -446,9 +447,9 @@
           f.fl.firstChild.style.opacity = 1 - swap; f.fl.lastChild.style.opacity = swap;
           if (!f.inHere) f.fl.style.opacity = 1 - Math.max(0, (m - 0.7) / 0.3);
           // a short tail of the hairline trails the word, then lets go of it
-          const tail = f.total * 0.3, a0 = Math.max(0, d - tail);
+          const tail = f.total * 0.22, a0 = Math.max(0, d - tail);
           f.path.style.strokeDasharray = `0 ${a0} ${d - a0} ${f.total * 2}`;
-          f.path.style.opacity = Math.min(1, r * 6) * (1 - Math.max(0, (r - 0.75) / 0.25));
+          f.path.style.opacity = 0.38 * Math.min(1, r * 6) * (1 - Math.max(0, (r - 0.7) / 0.3));   // a faint thread, not a stroke
           if (r >= 1) {
             f.done = true; f.path.remove();
             const v = f.v; v.landed = true; if (f.inHere) v.arrived[s] = performance.now();

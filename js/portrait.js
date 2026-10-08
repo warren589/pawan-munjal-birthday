@@ -302,20 +302,22 @@
       const S = 1024, pad = 1, pages = [];
       let pg = null, x = 0, y = 0, row = 0;
       for (const g of glyphs) {
-        const sw = Math.ceil((g.w + pad * 2) * dpr), sh = Math.ceil((g.h + pad * 2) * dpr);
+        // whole device pixels throughout, so the cut copies the texture exactly instead of resampling (and fading) it
+        const sx0 = Math.floor((g.x - pad) * dpr), sy0 = Math.floor((g.y - pad) * dpr);
+        const sw = Math.ceil((g.x + g.w + pad) * dpr) - sx0, sh = Math.ceil((g.y + g.h + pad) * dpr) - sy0;
         if (pg && x + sw > S) { x = 0; y += row; row = 0; }
         if (!pg || y + sh > S) { pg = canvas(S, S).getContext('2d'); pg.textBaseline = 'alphabetic'; pages.push(pg); x = y = row = 0; }
-        const sx0 = (g.x - pad) * dpr, sy0 = (g.y - pad) * dpr;   // where this glyph's box sits on the texture
         pg.save(); pg.beginPath(); pg.rect(x, y, sw, sh); pg.clip();
         // the word's own letter shapes as a stencil, set exactly as the layout set them…
         const c = Math.cos(g.ang), sn = Math.sin(g.ang);
         pg.setTransform(dpr * c, dpr * sn, -dpr * sn, dpr * c, x + g.tx * dpr - sx0, y + g.ty * dpr - sy0);
-        pg.font = `${g.wt} ${g.fs}px ${FONT}`; pg.fillStyle = '#000'; pg.fillText(g.text, 0, 0);
+        pg.font = `${g.wt} ${g.fs}px ${FONT}`; pg.fillStyle = pg.strokeStyle = '#000'; pg.lineWidth = 1 / dpr; pg.lineJoin = 'round';
+        pg.strokeText(g.text, 0, 0); pg.fillText(g.text, 0, 0);   // a device pixel bolder, so the letters' soft edges aren't faded twice
         // …filled with the finished portrait's pixels
         pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalCompositeOperation = 'source-in';
         pg.drawImage(tex, sx0, sy0, sw, sh, x, y, sw, sh);
         pg.restore();
-        g.sp = { c: pg.canvas, sx: x, sy: y, sw, sh, w: sw / dpr, h: sh / dpr };
+        g.sp = { c: pg.canvas, sx: x, sy: y, sw, sh, w: sw / dpr, h: sh / dpr, ox: sx0 / dpr - (g.x + g.w / 2), oy: sy0 / dpr - (g.y + g.h / 2) };
         x += sw; if (sh > row) row = sh;
       }
     }
@@ -327,7 +329,7 @@
       ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const put = (g, cx, cy, a) => {
         const sp = g.sp; ctx.globalAlpha = a * mul;
-        ctx.drawImage(sp.c, sp.sx, sp.sy, sp.sw, sp.sh, cx - sp.w / 2, cy - sp.h / 2, sp.w, sp.h);
+        ctx.drawImage(sp.c, sp.sx, sp.sy, sp.sw, sp.sh, cx + sp.ox, cy + sp.oy, sp.w, sp.h);
       };
       for (let k = 0; k < P.length; k++) {
         const p = P[k];
