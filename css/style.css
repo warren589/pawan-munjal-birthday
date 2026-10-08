@@ -55,7 +55,8 @@ body.on-letters .rail, body.on-letters .findpill { opacity: 0; pointer-events: n
 /* ---------- stage: one sticky portrait, notes scroll past it ---------- */
 main { position: relative; }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; z-index: 1; overflow: hidden; }
-.frame { position: absolute; top: calc(50% + 14px); left: 33%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 1.2s var(--ease); }
+/* portraits stand on the bottom edge of the screen */
+.frame { position: absolute; bottom: 0; left: 33%; transform: translateX(-50%); opacity: 0; transition: opacity 1.2s var(--ease); }
 body.ready .frame { opacity: 1; }
 .portrait { display: block; }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
@@ -188,7 +189,7 @@ textarea.err { border-color: var(--accent); }
   :root { --hdr: 54px; }
   .top { padding: 0 18px; }
   .mark span { display: none; }
-  .frame, .loading { left: 50%; top: calc(var(--hdr) + 2px); transform: translate(-50%, 0); }
+  .frame, .loading { left: 50%; top: calc(var(--hdr) + 2px); bottom: auto; transform: translate(-50%, 0); }
   .sec { padding: 0; align-items: flex-end; min-height: 120svh; }
   .note, .hero .note { width: 100%; padding: 60px 20px calc(70px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--paper) 50px); }
   .note h1, .note h2, .hero h1 { font-size: 34px; }
