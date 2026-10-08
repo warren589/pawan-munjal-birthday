@@ -128,28 +128,36 @@ body.finding .findpill { background: var(--accent); border-color: var(--accent);
 .toast__s { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
 .toast__a { display: flex; gap: 20px; }
 
-/* ---------- composer ---------- */
-.composer, .sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; }
+/* ---------- composer: docked beside the portrait, no overlay ---------- */
+.sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; }
 .scrim { position: absolute; inset: 0; background: rgba(243, 238, 230, .82); backdrop-filter: blur(6px); opacity: 0; transition: opacity .45s var(--ease); }
-.composer.open .scrim, .sheet.open .scrim { opacity: 1; }
-.panel {
-  position: relative; width: min(600px, calc(100vw - 32px)); max-height: calc(100svh - 32px); overflow: auto;
-  background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 40px 40px 30px; box-shadow: 0 40px 90px rgba(29, 26, 23, .14);
-  opacity: 0; transform: translateY(16px); transition: opacity .45s var(--ease), transform .45s var(--ease);
-}
-.composer.open .panel { opacity: 1; transform: none; }
-.panel h2 { font: 300 34px/1.1 var(--serif); letter-spacing: -.01em; margin: 0 0 22px; }
+.sheet.open .scrim { opacity: 1; }
+.composer { position: fixed; left: 62vw; top: 50%; width: min(420px, 32vw); z-index: 40; transform: translateY(calc(-50% + 16px)); opacity: 0; pointer-events: none; transition: opacity .55s var(--ease), transform .55s var(--ease); }
+.composer.open { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+body.composing .flow .note, body.composing .findpill, body.composing .toast { opacity: 0 !important; pointer-events: none; transition: opacity .4s var(--ease); }
+.panel { position: relative; }
+.panel h2 { font: 300 34px/1.1 var(--serif); letter-spacing: -.01em; margin: 0 0 20px; }
+.composer .x { right: -10px; top: -12px; }
+/* everything except the message steps back while the words travel */
+.composer > .panel > :not(.msgwrap) { transition: opacity .4s var(--ease); }
+.composer.sending > .panel > :not(.msgwrap) { opacity: 0; pointer-events: none; }
 .x { position: absolute; right: 14px; top: 12px; width: 38px; height: 38px; border: 0; background: none; font: 300 26px/1 var(--serif); color: var(--muted); }
 .x:hover { color: var(--ink); }
 .msgwrap { position: relative; margin-bottom: 16px; }
-textarea, .msgpreview { width: 100%; min-height: 150px; padding: 16px 18px; font: 400 20px/1.45 var(--serif); border-radius: 8px; }
-textarea { border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); resize: none; outline: none; transition: border-color .3s, opacity .4s; }
+textarea, .msgpreview { width: 100%; min-height: 160px; max-height: 40vh; padding: 16px 18px; font: 400 20px/1.45 var(--serif); border-radius: 8px; white-space: pre-wrap; overflow-wrap: break-word; overflow-y: auto; margin: 0; }
+/* the textarea's own text is invisible; the mirror beneath it shows the same text with recognised words picked out */
+textarea { position: relative; display: block; border: 1px solid var(--line); background: transparent; color: transparent; caret-color: var(--ink); resize: none; outline: none; transition: border-color .3s, opacity .4s; }
+textarea::placeholder { color: var(--muted); }
 textarea:focus { border-color: var(--ink-soft); }
 textarea.err { border-color: var(--accent); }
-.msgpreview { position: absolute; inset: 0; border: 1px solid transparent; color: var(--ink-soft); opacity: 0; pointer-events: none; transition: opacity .4s; overflow: hidden; }
-.msgpreview mark { background: none; color: var(--accent); font-weight: 500; box-shadow: inset 0 -.5em rgba(168, 69, 44, .1); transition: box-shadow .5s; }
-.composer.reading textarea { opacity: 0; }
-.composer.reading .msgpreview { opacity: 1; }
+.msgwrap { background: var(--paper-2); border-radius: 8px; }
+.msgpreview { position: absolute; inset: 0; border: 1px solid transparent; color: var(--ink); pointer-events: none; overflow: hidden; scrollbar-width: none; transition: color .6s var(--ease); }
+.msgpreview mark { background: none; color: var(--accent); box-shadow: inset 0 -.38em rgba(168, 69, 44, .12); border-radius: 2px; transition: opacity .25s, color .4s; }
+.msgpreview mark.gone { opacity: 0; }
+.composer.sending textarea { border-color: transparent; }
+.composer.sending .msgwrap { background: transparent; transition: background .5s; }
+.composer.emptied .msgpreview { color: rgba(29, 26, 23, 0); transition: color 1s var(--ease); }
+.found { min-height: 1.4em; margin: 8px 0 14px; font: 400 12px/1.4 var(--sans); color: var(--accent); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
 .two label span { display: block; font: 500 10px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 .two label i { font-style: normal; text-transform: none; letter-spacing: 0; }
@@ -157,7 +165,8 @@ textarea.err { border-color: var(--accent); }
 .two input:focus { border-bottom-color: var(--ink); }
 .panel__foot { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
 .fine { font: 400 12px/1.5 var(--sans); color: var(--muted); margin: 18px 0 0; }
-.flyer { position: fixed; z-index: 70; pointer-events: none; font: 700 12px/1 var(--narrow); letter-spacing: .02em; color: var(--accent); white-space: nowrap; will-change: transform; }
+.flyer { position: fixed; z-index: 70; pointer-events: none; color: var(--accent); white-space: nowrap; line-height: 1; will-change: transform; transition: color .3s; }
+.flyer.landing { font-family: var(--narrow) !important; font-weight: 700 !important; letter-spacing: .02em; }
 
 /* ---------- word sheet ---------- */
 .sheet { align-items: flex-end; }
@@ -193,8 +202,15 @@ textarea.err { border-color: var(--accent); }
   .rail button.on::after { box-shadow: none; width: 7px; height: 7px; }
   .findpill { left: 50%; bottom: calc(56px + env(safe-area-inset-bottom)); }
   .toast { right: 16px; left: 16px; width: auto; top: auto; bottom: calc(110px + env(safe-area-inset-bottom)); }
-  .composer { align-items: flex-end; }
-  .panel { width: 100vw; border-radius: 14px 14px 0 0; padding: 30px 20px calc(24px + env(safe-area-inset-bottom)); }
+  /* mobile: a sheet over the lower half only, so the portrait above stays visible */
+  .composer { left: 0; right: 0; top: auto; bottom: 0; width: auto; transform: translateY(24px); background: var(--paper); border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -16px 40px rgba(29, 26, 23, .08); padding: 22px 18px calc(18px + env(safe-area-inset-bottom)); max-height: 62svh; overflow: auto; }
+  .composer.open { transform: none; }
+  /* once the words lift off, the sheet slides away so they can be seen landing */
+  .composer.emptied { transform: translateY(105%); transition: transform .8s var(--ease) .15s, opacity .8s; }
+  .composer .x { right: 6px; top: 6px; }
+  .panel h2 { font-size: 24px; margin-bottom: 12px; }
+  textarea, .msgpreview { min-height: 110px; font-size: 17px; }
+  .composer .fine { display: none; }
   .two { grid-template-columns: 1fr; }
   .sheet__panel { padding: 24px 20px calc(30px + env(safe-area-inset-bottom)); }
   .letter p { font-size: 19px; }

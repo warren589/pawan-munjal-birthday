@@ -271,19 +271,46 @@
   }
   sheet.addEventListener('click', e => { if (e.target.closest('.js-close-sheet')) hide(sheet); });
   function show(el) { clearTimeout(el._t); el.hidden = false; requestAnimationFrame(() => el.classList.add('open')); body.classList.add('locked'); }
-  function hide(el) { el.classList.remove('open'); clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 420); if (!$$('.composer.open, .sheet.open').length) body.classList.remove('locked'); }
+  function hide(el) { el.classList.remove('open'); clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 420); if (!$$('.sheet.open').length) body.classList.remove('locked'); }
   $('.js-close-reader').addEventListener('click', closeReader);
-  addEventListener('keydown', e => { if (e.key === 'Escape') { closeReader(); if (sheet.classList.contains('open')) hide(sheet); else if (composer.classList.contains('open')) hide(composer); } });
+  addEventListener('keydown', e => { if (e.key === 'Escape') { closeReader(); if (sheet.classList.contains('open')) hide(sheet); else if (composer.classList.contains('open')) closeComposer(); } });
 
   // ---------------- composer → words fly into the portrait ----------------
-  const composer = $('.composer'), form = $('.panel'), ta = form.elements.msg, preview = $('.msgpreview');
-  $$('.js-write').forEach(b => b.addEventListener('click', () => { composer.classList.remove('reading'); show(composer); setTimeout(() => ta.focus(), 380); }));
-  composer.addEventListener('click', e => { if (e.target.closest('.js-close')) hide(composer); });
+  // The composer sits beside the portrait (no overlay), so the portrait stays in view the whole time.
+  // Words are picked out live as you type, and on submit they lift straight out of your text.
+  const composer = $('.composer'), form = $('.panel'), ta = form.elements.msg, preview = $('.msgpreview'), found = $('.found');
+  function markText(text, ex, extra = '') {
+    const spans = []; ex.found.forEach((f, w) => f.spans.forEach(sp => spans.push([...sp, w]))); spans.sort((a, b) => a[0] - b[0]);
+    let html = '', at = 0;
+    spans.forEach(([a, b, w]) => { if (a < at) return; html += esc(text.slice(at, a)) + `<mark data-w="${w}">${esc(text.slice(a, b))}</mark>`; at = b; });
+    return html + esc(text.slice(at)) + extra + '\n';
+  }
+  function mirror() {
+    const ex = extract(ta.value);
+    preview.innerHTML = markText(ta.value, ex);
+    preview.scrollTop = ta.scrollTop;
+    const n = ex.found.size;
+    found.textContent = n ? `${n} word${n > 1 ? 's' : ''} for his portrait: ${[...ex.found.keys()].join(', ')}` : '';
+  }
+  function openComposer() {
+    closeReader(); closeToast();
+    composer.classList.remove('sending', 'emptied'); clearTimeout(composer._t); composer.hidden = false; body.classList.add('composing');
+    requestAnimationFrame(() => composer.classList.add('open'));
+    setTimeout(() => ta.focus({ preventScroll: true }), 420);
+  }
+  function closeComposer() {
+    composer.classList.remove('open'); body.classList.remove('composing');
+    clearTimeout(composer._t); composer._t = setTimeout(() => { composer.hidden = true; }, 500);
+  }
+  $$('.js-write').forEach(b => b.addEventListener('click', openComposer));
+  composer.addEventListener('click', e => { if (e.target.closest('.js-close')) closeComposer(); });
   $('.js-sample').addEventListener('click', () => {
     ta.value = 'Your vision and humility inspired me to lead with courage. Thank you for believing in young people like me, and for every lesson along the way.';
     form.elements.name.value ||= 'Aarav Malhotra'; form.elements.rel.value ||= 'Young engineer, Hero MotoCorp';
+    mirror();
   });
-  ta.addEventListener('input', () => ta.classList.remove('err'));
+  ta.addEventListener('input', () => { ta.classList.remove('err'); mirror(); });
+  ta.addEventListener('scroll', () => { preview.scrollTop = ta.scrollTop; });
 
   let mine = 0;
   form.addEventListener('submit', e => {
@@ -294,16 +321,10 @@
     messages.push(m); const mi = messages.length - 1;
     ex.words.forEach(w => used.add(w));
 
-    // 1. the message, with its words picked out
-    const spans = []; ex.found.forEach((f, w) => f.spans.forEach(sp => spans.push([...sp, w]))); spans.sort((a, b) => a[0] - b[0]);
-    let html = '', at = 0;
-    spans.forEach(([a, b, w]) => { if (a < at) return; html += esc(text.slice(at, a)) + `<mark data-w="${w}">${esc(text.slice(a, b))}</mark>`; at = b; });
-    html += esc(text.slice(at));
-    if (ex.fallback.size) html += ' ' + [...ex.fallback].map(w => `<mark class="fb" data-w="${w}">${w}</mark>`).join(' ');
-    preview.innerHTML = html;
-    composer.classList.add('reading');
+    // the text stays exactly where it was typed; everything around it quietly steps back
+    preview.innerHTML = markText(text, ex, ex.fallback.size ? ' ' + [...ex.fallback].map(w => `<mark class="fb" data-w="${w}">${w}</mark>`).join(' ') : '');
+    ta.blur(); composer.classList.add('sending');
 
-    // 2. then each word lifts off to its place
     setTimeout(() => {
       const s = view.state, L = layoutFor(s), here = spec(s).code;
       const rect = cv.getBoundingClientRect(), sc = rect.width / W;
@@ -322,25 +343,38 @@
           railBtn = rail.querySelector(`[data-go="${CODES.indexOf(v.facets[0])}"]`);
           const r = railBtn.getBoundingClientRect(); tx = r.right - 6; ty = r.top + r.height / 2; size = 10;
         }
+        // the flyer starts as the very word on the page (same font, size, place), then becomes a portrait word
+        const cs = getComputedStyle(srcEl);
         const fl = document.createElement('span');
-        fl.className = 'flyer'; fl.textContent = v.t.toUpperCase(); fl.style.fontSize = size + 'px';
-        fl.style.left = tx + 'px'; fl.style.top = ty + 'px';
+        fl.className = 'flyer'; fl.textContent = srcEl.textContent;
+        Object.assign(fl.style, { left: sr.left + sr.width / 2 + 'px', top: sr.top + sr.height / 2 + 'px', font: cs.font, color: getComputedStyle(srcEl).color });
         document.body.appendChild(fl);
-        const s0 = Math.max(1, parseFloat(getComputedStyle(srcEl).fontSize) / size), dx = sr.left + sr.width / 2 - tx, dy = sr.top + sr.height / 2 - ty;
+        const delay = i * 90;
+        setTimeout(() => srcEl.classList.add('gone'), delay);
+        const dx = tx - (sr.left + sr.width / 2), dy = ty - (sr.top + sr.height / 2), s1 = size / parseFloat(cs.fontSize);
+        const lift = Math.min(80, Math.abs(dx) * 0.12 + 30);
         fl.animate([
-          { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(${s0})`, opacity: 0 },
-          { transform: `translate(-50%,-50%) translate(${dx}px,${dy - 6}px) scale(${s0})`, opacity: 1, offset: 0.12 },
-          { transform: `translate(-50%,-50%) translate(${dx * 0.4}px,${dy * 0.4 - 60}px) scale(${(s0 + 1) / 2})`, opacity: 1, offset: 0.6 },
-          { transform: 'translate(-50%,-50%) translate(0,0) scale(1)', opacity: inHere ? 1 : 0 }
-        ], { duration: 1300, delay: 120 + i * 110, easing: 'cubic-bezier(.6,0,.2,1)', fill: 'forwards' }).onfinish = () => {
+          { transform: 'translate(-50%,-50%)', opacity: 1, letterSpacing: '0em' },
+          { transform: `translate(-50%,-50%) translate(${dx * 0.35}px, ${dy * 0.35 - lift}px) scale(${(1 + s1) / 2})`, opacity: 1, offset: 0.45 },
+          { transform: `translate(-50%,-50%) translate(${dx}px, ${dy}px) scale(${s1})`, opacity: inHere ? 1 : 0 }
+        ], { duration: 1150, delay, easing: 'cubic-bezier(.55,0,.25,1)', fill: 'forwards' });
+        // swap to the portrait's own letterforms just before landing
+        setTimeout(() => { fl.textContent = v.t.toUpperCase(); fl.classList.add('landing'); }, delay + 700);
+        setTimeout(() => {
           v.landed = true; if (inHere) v.arrived[s] = performance.now();
           if (railBtn) { railBtn.classList.remove('ping'); void railBtn.offsetWidth; railBtn.classList.add('ping'); }
-          fl.remove(); kick();
-          if (--left === 0) done(entries);
-        };
+          kick();
+          fl.animate([{ opacity: inHere ? 1 : 0 }, { opacity: 0 }], { duration: 220, fill: 'forwards' }).onfinish = () => fl.remove();
+          if (--left === 0) {
+            done(entries);
+            closeComposer();
+            setTimeout(() => { form.reset(); preview.innerHTML = ''; found.textContent = ''; composer.classList.remove('sending', 'emptied'); }, 520);
+          }
+        }, delay + 1150);
       });
-      setTimeout(() => { hide(composer); setTimeout(() => { form.reset(); composer.classList.remove('reading'); }, 450); }, 260);
-    }, 900);
+      // the rest of the message dissolves as its words leave
+      setTimeout(() => composer.classList.add('emptied'), 250);
+    }, 380);
   });
 
   function done(entries) {

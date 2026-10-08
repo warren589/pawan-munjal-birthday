@@ -88,16 +88,16 @@
   <div class="toast__a"><button class="link js-find-toast" type="button">Find my words</button><button class="link js-close-toast" type="button">Close</button></div>
 </div>
 
-<div class="composer" hidden>
-  <div class="scrim js-close"></div>
-  <form class="panel" role="dialog" aria-modal="true" aria-labelledby="composer-title" novalidate>
+<aside class="composer" hidden aria-labelledby="composer-title">
+  <form class="panel" novalidate>
     <button class="x js-close" type="button" aria-label="Close">×</button>
     <p class="eyebrow">Your message</p>
     <h2 id="composer-title">What has he meant to you?</h2>
     <div class="msgwrap">
-      <textarea name="msg" rows="5" maxlength="400" placeholder="A memory, a lesson, a quality you admire…" required></textarea>
       <div class="msgpreview" aria-hidden="true"></div>
+      <textarea name="msg" rows="5" maxlength="400" placeholder="A memory, a lesson, a quality you admire…" required></textarea>
     </div>
+    <p class="found" aria-live="polite"></p>
     <div class="two">
       <label><span>Name <i>(optional)</i></span><input name="name" autocomplete="name"></label>
       <label><span>Relationship or organisation <i>(optional)</i></span><input name="rel"></label>
@@ -108,7 +108,7 @@
     </div>
     <p class="fine">Your words join the portrait straight away. Your full message appears once approved.</p>
   </form>
-</div>
+</aside>
 
 <div class="sheet" hidden>
   <div class="scrim js-close-sheet"></div>
