@@ -18,10 +18,10 @@ window.FACETS = [
     line: "Before every title, he is a father, a husband and a grandfather.",
     anchor: [0.84, 0.32],   // the detail the note's line points to
     story: ["The values he carries into every boardroom were shaped at home, and are still kept there.", "Family members describe a man who listens first, laughs easily and is never too busy to be present."] },
-  { code: 'M', name: 'Mentor', short: 'Mentor', img: null, heads: null,
-    ink: ['#9c8355', '#3a2e17'],
+  { code: 'M', name: 'Mentor', short: 'Mentor', img: 'mentor', headScale: 1.1, headWeight: 700, heads: [[0.105, 0.341, 0.07, 0.141], [0.197, 0.217, 0.055, 0.124], [0.468, 0.172, 0.07, 0.152], [0.824, 0.262, 0.049, 0.124], [0.903, 0.217, 0.061, 0.141]],
+    ink: ['#86703f', '#33270f'],
     line: "He believed in people before they believed in themselves.",
-    anchor: null,   // the detail the note's line points to
+    anchor: [0.428, 0.623],   // the detail the note's line points to
     story: ["Generations of leaders remember a conversation, a nudge, a door held open at exactly the right moment.", "His greatest work may be the people he shaped, many of whom now lead in their own right."] },
   { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', headScale: 1.15, heads: [[0.27, 0.2, 0.1, 0.16], [0.69, 0.22, 0.095, 0.16]],
     ink: ['#6a8589', '#1d3035'],

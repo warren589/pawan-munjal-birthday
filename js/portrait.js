@@ -105,7 +105,9 @@
             const pick = spec.words[(R() * spec.words.length) | 0], text = pick.t.toUpperCase();
             const yb = base(px + fs * 2, y);
             const u0 = Math.min(1, Math.max(0, (px + fs * 2) / W)), v0 = (yb - fs * 0.35) / H;
-            const wt = 400 + Math.round(3 * Math.min(1, toneOf(L(u0, v0)) * 1.25)) * 100;   // 400–700, reaching full weight in dark hair and cloth
+            let wt = 400 + Math.round(3 * Math.min(1, toneOf(L(u0, v0)) * 1.25)) * 100;   // 400–700, reaching full weight in dark hair and cloth
+            // small faces in group photos: heavier letters cover more of the face, so its features carry through the ink
+            if (region === 'head' && spec.headWeight) wt = Math.max(wt, spec.headWeight);
             const w = measure(text, wt);
             const u = (px + w / 2) / W;
             // any word touching the silhouette is set; the smoothed outline trims it afterwards
