@@ -57,29 +57,20 @@
   </div>
 </main>
 
-<section class="board" id="messages" aria-labelledby="board-title">
-  <div class="board__stage">
-    <canvas class="field" aria-hidden="true"></canvas>
-    <canvas class="field-hi" aria-hidden="true"></canvas>
-    <svg class="board__lead" aria-hidden="true"><path d=""/><circle r="3"/></svg>
-    <div class="board__intro">
+<section class="voices" id="messages" aria-labelledby="voices-title">
+  <div class="voices__stage">
+    <div class="voices__field" aria-hidden="true"></div>
+    <header class="voices__intro">
       <p class="eyebrow">The messages</p>
-      <h2 id="board-title"><span class="js-count">2,418</span> voices</h2>
-      <p class="lede">Letters from everyone whose life he has touched. Scroll on to read them one by one, or open any letter.</p>
+      <h2 id="voices-title"><span class="js-count">2,418</span> voices</h2>
+      <p class="lede">Letters from people whose lives he has touched.</p>
+    </header>
+    <div class="voices__stack" aria-live="polite"></div>
+    <div class="voices__outro" aria-hidden="true">
+      <p class="voices__outro-t">Every one of them, part of his story.</p>
+      <a class="link" href="#letters">Read every message ↓</a>
     </div>
-    <article class="feature" aria-live="polite">
-      <div class="feature__body"></div>
-      <div class="board__bar">
-        <span class="board__n"></span>
-        <span class="board__nav"><button class="js-prev" type="button" aria-label="Previous message">←</button><button class="js-next" type="button" aria-label="Next message">→</button></span>
-        <button class="link js-play" type="button">Play</button>
-        <button class="link js-bsearch" type="button" aria-expanded="false">Search</button>
-      </div>
-      <div class="board__search" hidden>
-        <label class="search"><span class="sr">Search messages</span><input type="search" placeholder="A word or a name"></label>
-        <div class="filters" role="group" aria-label="Filter by facet"></div>
-      </div>
-    </article>
+    <p class="voices__meta"><span class="voices__n">01</span><span class="voices__bar"><i></i></span><span><span class="js-count">2,418</span> voices</span></p>
   </div>
 </section>
 
