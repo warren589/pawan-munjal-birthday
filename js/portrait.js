@@ -105,7 +105,7 @@
             const pick = spec.words[(R() * spec.words.length) | 0], text = pick.t.toUpperCase();
             const yb = base(px + fs * 2, y);
             const u0 = Math.min(1, Math.max(0, (px + fs * 2) / W)), v0 = (yb - fs * 0.35) / H;
-            const wt = 400 + Math.round(3 * toneOf(L(u0, v0))) * 100;         // 400–700, heavier in shadow
+            const wt = 400 + Math.round(3 * Math.min(1, toneOf(L(u0, v0)) * 1.25)) * 100;   // 400–700, reaching full weight in dark hair and cloth
             const w = measure(text, wt);
             const u = (px + w / 2) / W;
             // any word touching the silhouette is set; the smoothed outline trims it afterwards

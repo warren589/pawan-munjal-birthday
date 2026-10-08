@@ -11,7 +11,7 @@ window.FACETS = [
     ink: ['#73857a', '#24332b'],
     kicker: 'Patience, precision, and the quiet joy of the game.',
     lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus and a deep respect for fair play.' },
-  { code: 'F', name: 'Family Man', short: 'Family', img: 'family', headScale: 1.6, heads: [[0.147, 0.211, 0.048, 0.08], [0.258, 0.229, 0.044, 0.075], [0.405, 0.134, 0.055, 0.105], [0.58, 0.229, 0.048, 0.08], [0.712, 0.291, 0.044, 0.075], [0.825, 0.217, 0.048, 0.08]],
+  { code: 'F', name: 'Family Man', short: 'Family', img: 'family', headScale: 1.3, heads: [[0.147, 0.192, 0.052, 0.098], [0.258, 0.213, 0.048, 0.092], [0.408, 0.116, 0.06, 0.124], [0.58, 0.208, 0.052, 0.098], [0.712, 0.271, 0.048, 0.092], [0.825, 0.199, 0.052, 0.098]],
     ink: ['#a0705b', '#3b2219'],
     kicker: 'Behind every title, a home full of warmth.',
     lede: 'A father and grandfather first. The values he carries into every boardroom were shaped, and are still kept, at home.' },
@@ -27,7 +27,7 @@ window.FACETS = [
     ink: ['#93687a', '#3a1f2b'],
     kicker: 'Progress means little unless it lifts others.',
     lede: 'Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.' },
-  { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', heads: [[0.4, 0.16, 0.15, 0.14]],
+  { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', heads: [[0.32, 0.14, 0.14, 0.15]],
     ink: ['#8f7a66', '#33261c'],
     kicker: 'Decades of roads travelled, and still moving.',
     lede: 'Milestones, memories and millions of miles, measured in everyone who came along for the ride.' }
