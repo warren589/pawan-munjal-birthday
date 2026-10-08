@@ -215,12 +215,13 @@
       ctx.globalAlpha = 0.09 * (1 - b.e); ctx.drawImage(A.shadow, A.ox + A.W * 0.012, A.oy + A.H * 0.014, A.W, A.H);
       ctx.globalAlpha = 0.09 * b.e; ctx.drawImage(B.shadow, B.ox + B.W * 0.012, B.oy + B.H * 0.014, B.W, B.H);
       ctx.globalAlpha = 1;
-      // the finished portraits hand over to the moving words at the very start and end, so nothing jumps
-      const inA = 1 - smooth(0, 0.1, b.e), inB = smooth(0.9, 1, b.e);
+      // the travelling words are cut from the finished portraits, so at rest they cover them exactly: the portraits
+      // fade underneath (only edge details show the difference) and the words simply begin to drift, with no visible switch
+      const inA = 1 - smooth(0, 0.06, b.e), inB = smooth(0.94, 1, b.e);
       if (inA > 0.002) { ctx.globalAlpha = inA; ctx.drawImage(A.tex, A.ox, A.oy, A.W, A.H); }
       if (inB > 0.002) { ctx.globalAlpha = inB; ctx.drawImage(B.tex, B.ox, B.oy, B.W, B.H); }
       ctx.globalAlpha = 1;
-      wp.drawShuffle(ctx, A, B, b.e, dpr, 1 - Math.max(inA, inB));
+      wp.drawShuffle(ctx, A, B, Math.min(1, Math.max(0, (b.e - 0.05) / 0.9)), dpr);
       const fadeA = Math.max(0, 1 - b.e * 4), fadeB = Math.max(0, b.e * 4 - 3);   // visitor words step aside during the shuffle
       anim = drawPortrait(b.a, fadeA, 0, 1, now, true) || anim;
       anim = drawPortrait(b.b, fadeB, 0, 1, now, true) || anim;
