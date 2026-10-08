@@ -483,12 +483,47 @@
   renderLetters();
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
+  // ---------------- background field of words ----------------
+  // Rows of tiny words in an ink barely darker than the paper. It thins out behind the portrait and the note,
+  // and fades at the edges of the screen, so it adds texture without competing with anything.
+  const bg = $('.bgwords');
+  function drawBackground() {
+    const vw = innerWidth, vh = innerHeight, d = Math.min(2, devicePixelRatio || 1);
+    bg.width = Math.round(vw * d); bg.height = Math.round(vh * d);
+    const x = bg.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0);
+    const words = [...VOCAB.keys()].map(w => w.toUpperCase()), R = seeded(2026);
+    const fs = 9, lh = 15, gap = 9;
+    x.font = `500 ${fs}px ${window.WP_FONT}`; x.fillStyle = '#1d1a17'; x.textBaseline = 'alphabetic';
+    if ('letterSpacing' in x) x.letterSpacing = '0.6px';
+    for (let y = lh, r = 0; y < vh + lh; y += lh, r++) {
+      let px = -R() * 120;
+      while (px < vw) { const w = words[(R() * words.length) | 0]; x.globalAlpha = 0.026 + R() * 0.014; x.fillText(w, px, y); px += x.measureText(w).width + gap; }
+    }
+    x.globalAlpha = 1; x.globalCompositeOperation = 'destination-out';
+    // clear space behind the portrait and behind the note, softly
+    const fr = frame.getBoundingClientRect(), cx = fr.left + fr.width / 2, cy = fr.top + fr.height / 2;
+    const hole = (hx, hy, rx, ry, strength) => {
+      x.save(); x.translate(hx, hy); x.scale(1, ry / rx);
+      const g = x.createRadialGradient(0, 0, rx * 0.35, 0, 0, rx);
+      g.addColorStop(0, `rgba(0,0,0,${strength})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(0, 0, rx, 0, Math.PI * 2); x.fill(); x.restore();
+    };
+    hole(cx, cy, Math.max(fr.width, fr.height) * 0.6, fr.height * 0.6, 0.55);
+    if (!MOBILE.matches) hole(vw * 0.75, vh * 0.5, vw * 0.24, vh * 0.42, 1);
+    else hole(vw / 2, vh * 0.85, vw * 0.7, vh * 0.3, 0.9);
+    // and fade towards every edge of the screen
+    const edges = [[0, 0, 0, vh * 0.16], [0, vh, 0, vh * 0.84], [0, 0, vw * 0.1, 0], [vw, 0, vw * 0.9, 0]];
+    edges.forEach(([x0, y0, x1, y1]) => { const g = x.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, vw, vh); });
+    x.globalCompositeOperation = 'source-over';
+  }
+  addEventListener('resize', () => { clearTimeout(bg._t); bg._t = setTimeout(drawBackground, 160); });
+
   // ---------------- boot ----------------
   (async function boot() {
     await Promise.race([Promise.all([document.fonts.load('400 20px "Archivo Narrow"'), document.fonts.load('700 20px "Archivo Narrow"')]).catch(() => {}),
       new Promise(r => setTimeout(r, 2500))]);
     await wp.init(window.PORTRAITS);
-    geometry();
+    geometry(); drawBackground();
     layoutFor(blend().a);
     ready = true; body.classList.add('ready'); kick();
     setTimeout(warm, 300);
