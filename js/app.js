@@ -527,195 +527,205 @@
   renderLetters();
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
-  // ---------------- message board: the whole crowd as one quiet sheet, one voice brought forward ----------------
+  // ---------------- message board: letters to him, in layers, one brought forward ----------------
   const board = (() => {
-    const sec = $('.board'), stage = $('.board__stage'), fc = $('.field'), fx = fc.getContext('2d');
+    const sec = $('.board'), stage = $('.board__stage'), fc = $('.field'), fx = fc.getContext('2d'), hc = $('.field-hi'), hx = hc.getContext('2d');
     const card = $('.feature'), fbody = $('.feature__body'), nEl = $('.board__n'), lead = $('.board__lead'), lpath = $('.board__lead path'), ldot = $('.board__lead circle');
     const sPanel = $('.board__search'), sInput = sPanel.querySelector('input'), sFilters = sPanel.querySelector('.filters'), playBtn = $('.js-play'), sBtn = $('.js-bsearch');
-    const INK = '#1d1a17';
-    let SW = 0, SH = 0, D = 1, L = null, base = null, building = null;
-    let view = { s: 1, x: 0, y: 0 }, raf = 0;
+    const INK = '#1d1a17', MUTED = '#8a8279', CARD = '#faf7f1', TO = 'Dear Dr. Munjal,';
+    let SW = 0, SH = 0, D = 1, layers = null, byI = new Map(), building = null;
+    let viewY = 0, drift = 0, reveal = 0, raf = 0;
     let mode = 'field', auto = false, cur = -1, pos = 0, hover = null, q = '', qf = 'all', matches = null, list = [], timer = null, inView = false, paused = false;
     let shuffled = null;
-    // the sheet's order: your own message first, then everyone else in a fixed shuffle (so early messages don't crowd the top)
     function fieldOrder() {
       if (!shuffled) { const R = seeded(77); shuffled = messages.map((m, i) => i).filter(i => !messages[i].mine); for (let i = shuffled.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; } }
-      const mine = messages.map((m, i) => i).filter(i => messages[i].mine).reverse();
-      return [...mine, ...shuffled];
+      return [...messages.map((m, i) => i).filter(i => messages[i].mine).reverse(), ...shuffled];
     }
-    // reading order: yours, then the hand-picked messages, then the rest as they sit on the sheet
+    // reading order: yours, then the hand-picked messages, then everyone else
     function readOrder() {
       const f = fieldOrder(), rank = i => messages[i].mine ? 0 : messages[i].crowd ? 2 : 1;
       return f.map((i, k) => [i, k]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(a => a[0]);
     }
 
+    // ---- layout: three layers of letter cards. Large ones in front around the title, smaller and fainter behind,
+    // running off the edges, so the wall reads as thousands of letters rather than one block of text ----
+    const SPEC = () => MOBILE.matches
+      ? [{ w: 92, fs: 5.8, lines: 3, a: 0.36, gap: 10, keep: 1, depth: 14 },
+         { w: 120, fs: 7.2, lines: 3, a: 0.66, gap: 20, keep: 0.34, depth: 34, sign: true },
+         { w: 158, fs: 9.2, lines: 4, a: 1, depth: 60, sign: true, rel: true, spots: [[0.27, 0.2], [0.75, 0.25], [0.24, 0.8], [0.74, 0.86]] }]
+      : [{ w: 118, fs: 6.8, lines: 3, a: 0.34, gap: 16, keep: 1, depth: 18 },
+         { w: 152, fs: 8.4, lines: 3, a: 0.66, gap: 30, keep: 0.34, depth: 44, sign: true },
+         { w: 200, fs: 10.4, lines: 4, a: 1, depth: 80, sign: true, rel: true,
+           spots: [[0.11, 0.23], [0.33, 0.15], [0.66, 0.16], [0.88, 0.24], [0.09, 0.55], [0.91, 0.56], [0.13, 0.85], [0.37, 0.84], [0.63, 0.85], [0.87, 0.86]] }];
+    const MARGIN = 90;   // each layer is drawn taller than the screen, so it can drift without showing an edge
+    function measureCard(m, L) {
+      const fs = L.fs, lh = fs * 1.42, pad = fs * 1.15, inner = L.w - pad * 2;
+      fx.font = `400 ${fs}px Newsreader`;
+      const words = m.text.split(/\s+/), lines = []; let ln = '';
+      for (const w of words) {
+        const t = ln ? ln + ' ' + w : w;
+        if (fx.measureText(t).width > inner && ln) { lines.push(ln); ln = w; if (lines.length === L.lines) break; } else ln = t;
+      }
+      if (lines.length < L.lines && ln) lines.push(ln);
+      const full = lines.join(' ').length >= m.text.length - 1;
+      if (!full) { let last = lines[lines.length - 1]; while (last.length && fx.measureText(last + '…').width > inner) last = last.replace(/\s*\S+$/, ''); lines[lines.length - 1] = last.replace(/[,.;:]$/, '') + '…'; }
+      const h = pad * 2 + lh * (1.25 + lines.length) + (L.sign ? lh * 1.15 : 0) + (L.rel ? lh * 0.85 : 0);
+      return { lines, h, lh, pad };
+    }
     function layout() {
       const r = stage.getBoundingClientRect(); SW = r.width; SH = r.height; D = Math.min(2, devicePixelRatio || 1);
-      fc.width = Math.round(SW * D); fc.height = Math.round(SH * D);
-      const mob = MOBILE.matches, fs = mob ? 6.2 : 7.4, lh = fs * 1.42, pad = mob ? 14 : 28;
-      const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) + 6, bottom = SH - 12;
-      const gap = mob ? 12 : 22, want = mob ? 150 : 236, cols = Math.max(2, Math.round((SW - pad * 2 + gap) / (want + gap))), cw = (SW - pad * 2 - gap * (cols - 1)) / cols;
-      const F = `400 ${fs}px Newsreader`, FN = `500 ${(fs * 0.8).toFixed(2)}px Archivo`;
-      const wc = new Map(), mw = (t, f) => { const k = f + '|' + t; let v = wc.get(k); if (v === undefined) { fx.font = f; v = fx.measureText(t).width; wc.set(k, v); } return v; };
-      const items = []; let col = 0, y = top + lh;
-      for (const i of fieldOrder()) {
-        const m = messages[i], ex = extract(m.text), inks = [];
-        ex.found.forEach((f, w) => { if (m.words.includes(w)) f.spans.forEach(([a, b]) => inks.push([a, b, FACETS[CODES.indexOf(facetsOf(w)[0])].ink[0]])); });
-        const toks = [], re = /\S+/g; let mm;
-        while ((mm = re.exec(m.text))) { const a = mm.index, b = a + mm[0].length, k = inks.find(sp => sp[0] < b && sp[1] > a); toks.push({ t: mm[0], f: F, ink: k ? k[2] : null }); }
-        ('— ' + (m.name || 'Anonymous').toUpperCase()).split(' ').forEach((t, k) => toks.push({ t, f: FN, name: true, sep: k === 0 }));
-        // wrap into lines of the column width
-        const lines = []; let ln = { dy: 0, toks: [], w: 0 };
-        for (const tk of toks) {
-          const w = mw(tk.t, tk.f), sp = mw(' ', tk.f) * (tk.name ? 1.4 : 1);
-          if (ln.toks.length && ln.w + sp + w > cw) { lines.push(ln); ln = { dy: lines.length * lh, toks: [], w: 0 }; }
-          tk.dx = ln.toks.length ? ln.w + sp : 0; ln.w = tk.dx + w; ln.toks.push(tk);
+      for (const c of [fc, hc]) { c.width = Math.round(SW * D); c.height = Math.round(SH * D); }
+      const spec = SPEC(), order = readOrder(), R = seeded(5); let k = 0;
+      const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr'));
+      byI = new Map();
+      layers = spec.slice().reverse().map(L => {   // fill front first, so it gets yours and the hand-picked messages
+        const cards = [];
+        const add = (x, y) => { if (k >= order.length) return null; const i = order[k++], m = messages[i], mc = measureCard(m, L), c = { i, m, x, y, w: L.w, ...mc, L }; cards.push(c); byI.set(i, c); return c; };
+        if (L.spots) {
+          for (const [u, v] of L.spots) { const c = add(0, 0); if (!c) break; c.x = u * SW - L.w / 2 + (R() - 0.5) * 24; c.y = Math.max(hdr + 8, v * SH - c.h / 2 + (R() - 0.5) * 20); }
+        } else {
+          // loose masonry: columns that start at staggered heights and bleed past every edge
+          const cols = Math.ceil((SW + L.gap) / (L.w + L.gap)) + 1, x0 = -L.w * 0.35 - R() * L.gap;
+          for (let c = 0; c < cols; c++) {
+            let y = -MARGIN - R() * 120;
+            while (y < SH + MARGIN) {
+              const x = x0 + c * (L.w + L.gap) + (R() - 0.5) * L.gap * 0.6;
+              if (R() < L.keep) { const cd = add(x, y); if (!cd) break; y += cd.h + L.gap; } else y += L.w * 0.55 + L.gap;
+            }
+          }
         }
-        lines.push(ln);
-        const h = (lines.length - 1) * lh;
-        if (y + h > bottom) { col++; y = top + lh; if (col >= cols) break; }
-        items.push({ i, x: pad + col * (cw + gap), y, h, lines, lh, fs });
-        y += h + lh * 1.75;
-      }
-      L = { items, cw, lh, fs, byI: new Map(items.map(it => [it.i, it])) };
-      renderBase();
+        return { L, cards, canvas: null };
+      }).reverse();
+      layers.forEach(renderLayer);
+      paint();
     }
-    function drawItem(ctx, it, a, accent) {
-      for (const ln of it.lines) for (const tk of ln.toks) {
-        ctx.font = tk.f; ctx.fillStyle = accent || tk.ink || INK;
-        ctx.globalAlpha = a * (accent ? 1 : tk.ink ? 0.7 : tk.name ? 0.62 : 0.48);
-        ctx.fillText(tk.t, it.x + tk.dx, it.y + ln.dy);
+    function rr(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+    function drawCard(ctx, c, a, hi) {
+      const { L } = c, fs = L.fs, x = c.x, y = c.y, front = !!L.spots;
+      ctx.globalAlpha = a;
+      ctx.shadowColor = `rgba(29,26,23,${hi ? 0.16 : front ? 0.09 : 0.06})`; ctx.shadowBlur = (hi ? 26 : front ? 18 : 8) * D; ctx.shadowOffsetY = (hi ? 10 : front ? 6 : 2) * D;
+      ctx.fillStyle = CARD; rr(ctx, x, y, c.w, c.h, fs * 0.45); ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.lineWidth = hi === 'accent' ? 1.2 : 0.6; ctx.strokeStyle = hi === 'accent' ? ACCENT : 'rgba(29,26,23,.1)'; ctx.stroke();
+      // a small mark in the facet's ink, like a postage stamp
+      const code = [...c.m.facets][0], f = FACETS[CODES.indexOf(code)];
+      if (f) { ctx.fillStyle = f.ink[0]; ctx.beginPath(); ctx.arc(x + c.w - c.pad - fs * 0.3, y + c.pad + fs * 0.35, fs * 0.3, 0, Math.PI * 2); ctx.fill(); }
+      let ty = y + c.pad + fs * 0.95;
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = `italic 400 ${fs}px Newsreader`; ctx.fillStyle = MUTED; ctx.fillText(TO, x + c.pad, ty);
+      ty += c.lh * 1.25;
+      ctx.font = `400 ${fs}px Newsreader`; ctx.fillStyle = INK;
+      for (const t of c.lines) { ctx.fillText(t, x + c.pad, ty); ty += c.lh; }
+      if (L.sign) {
+        ty += c.lh * 0.15;
+        ctx.font = `500 ${(fs * 0.74).toFixed(2)}px Archivo`; ctx.fillStyle = INK;
+        if ('letterSpacing' in ctx) ctx.letterSpacing = `${(fs * 0.08).toFixed(2)}px`;
+        ctx.fillText('— ' + (c.m.name || 'Anonymous').toUpperCase(), x + c.pad, ty);
+        if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+        if (L.rel && c.m.rel) { ty += c.lh * 0.85; ctx.font = `400 ${(fs * 0.74).toFixed(2)}px Archivo`; ctx.fillStyle = MUTED; ctx.fillText(c.m.rel, x + c.pad, ty); }
       }
-    }
-    const visible = (it, s, ox, oy) => !(it.x * s + ox > SW || (it.x + L.cw) * s + ox < 0 || (it.y - it.lh) * s + oy > SH || (it.y + it.h + it.lh) * s + oy < 0);
-    function drawAll(ctx, s, ox, oy, cull) {
-      ctx.setTransform(D * s, 0, 0, D * s, D * ox, D * oy); ctx.textBaseline = 'alphabetic';
-      for (const it of L.items) if (!cull || visible(it, s, ox, oy)) drawItem(ctx, it, matches && !matches.has(it.i) ? 0.14 : 1);
       ctx.globalAlpha = 1;
     }
-    function renderBase() {
-      base = base || document.createElement('canvas'); base.width = fc.width; base.height = fc.height;
-      const b = base.getContext('2d'); b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, base.width, base.height); drawAll(b, 1, 0, 0, false);
-      paint(true);
+    function renderLayer(ly) {
+      const c = ly.canvas || (ly.canvas = document.createElement('canvas'));
+      c.width = Math.round(SW * D); c.height = Math.round((SH + MARGIN * 2) * D);
+      const x = c.getContext('2d'); x.setTransform(D, 0, 0, D, 0, MARGIN * D);
+      for (const cd of ly.cards) drawCard(x, cd, matches && !matches.has(cd.i) ? 0.18 : 1);
+      // farther layers are washed towards the paper rather than made see-through, so cards overlap like a real stack
+      if (ly.L.a < 1) { x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 1 - ly.L.a; x.fillStyle = '#f3eee6'; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; }
     }
-    // a message lifted out of the sheet: a soft band behind its lines, its words at full strength
-    function mark(it, s, ox, oy, accent) {
-      fx.setTransform(D * s, 0, 0, D * s, D * ox, D * oy);
-      fx.globalAlpha = accent ? 0.13 : 0.07; fx.fillStyle = accent ? ACCENT : INK;
-      for (const ln of it.lines) fx.fillRect(it.x - 3, it.y + ln.dy - it.fs * 0.95, ln.w + 6, it.lh);
-      drawItem(fx, it, 1, accent ? ACCENT : null); fx.globalAlpha = 1;
-    }
-    function paint(crisp) {
-      if (!L) return;
-      const { s, x, y } = view;
+    // where a layer sits right now: its drift with the scroll, the reveal, and (on a phone) the slide that keeps
+    // the featured letter above the panel
+    const layerY = (n, ly) => viewY + drift * ly.L.depth + (1 - easeOut(Math.min(1, Math.max(0, reveal * 1.6 - n * 0.3)))) * 14 * (n + 1);
+    const layerA = n => Math.min(1, Math.max(0, reveal * 1.6 - n * 0.3));
+    const easeOut = t => 1 - Math.pow(1 - t, 3);
+    function paint() {
+      if (!layers) return;
       fx.setTransform(1, 0, 0, 1, 0, 0); fx.clearRect(0, 0, fc.width, fc.height);
-      if (s === 1) fx.drawImage(base, Math.round(x * D), Math.round(y * D));
-      else if (!crisp) { fx.setTransform(s, 0, 0, s, x * D, y * D); fx.drawImage(base, 0, 0); }
-      else drawAll(fx, s, x, y, true);
-      const h = hover != null && L.byI.get(hover); if (h && hover !== cur) mark(h, s, x, y, false);
-      const c = mode === 'feature' && L.byI.get(cur); if (c) mark(c, s, x, y, true);
+      layers.forEach((ly, n) => { const a = layerA(n); if (a > 0.003) { fx.globalAlpha = a; fx.drawImage(ly.canvas, 0, Math.round((layerY(n, ly) - MARGIN) * D)); } });
+      fx.globalAlpha = 1;
+      // lifted letters (hovered, or the one being read) sit on their own layer, so they stay clear when the wall dims
+      hx.setTransform(1, 0, 0, 1, 0, 0); hx.clearRect(0, 0, hc.width, hc.height);
+      const lift = (i, kind) => { const c = byI.get(i); if (!c) return; const n = layers.findIndex(l => l.cards.includes(c)); hx.setTransform(D, 0, 0, D, 0, (layerY(n, layers[n]) - (kind === 'hover' ? 3 : 0)) * D); drawCard(hx, c, 1, kind === 'feature' ? 'accent' : true); };
+      if (hover != null && hover !== cur) lift(hover, 'hover');
+      if (mode === 'feature' && cur >= 0) lift(cur, 'feature');
       placeLead();
     }
-    const clampView = v => {
-      const mob = MOBILE.matches && mode === 'feature';
-      return { s: v.s, x: Math.min(0, Math.max(SW - SW * v.s, v.x)), y: mob ? Math.min(0, Math.max(-SH * 0.5, v.y)) : Math.min(0, Math.max(SH - SH * v.s, v.y)) };
+    function screenRect(c) { const n = layers.findIndex(l => l.cards.includes(c)); const y = c.y + layerY(n, layers[n]); return { x: c.x, y, w: c.w, h: c.h }; }
+    const hit = (px, py) => {
+      if (!layers) return null;
+      for (let n = layers.length - 1; n >= 0; n--) for (const c of layers[n].cards) {
+        const r = screenRect(c); if (px > r.x && px < r.x + r.w && py > r.y && py < r.y + r.h) return c.i;
+      }
+      return null;
     };
-    function go(target, dur = 750, after) {
+    function slideTo(y, dur = 700) {
       cancelAnimationFrame(raf);
-      const from = { ...view }, to = clampView(target), t0 = performance.now(), d = REDUCED.matches ? 1 : dur;
-      const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      const step = now => {
-        const k = Math.min(1, (now - t0) / d), e = ease(k);
-        view = { s: from.s + (to.s - from.s) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
-        if (k < 1) { paint(false); raf = requestAnimationFrame(step); } else { view = to; paint(true); after && after(); }
-      };
-      raf = requestAnimationFrame(step);
+      const from = viewY, t0 = performance.now(), d = REDUCED.matches ? 1 : dur, ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const stepf = now => { const k = Math.min(1, (now - t0) / d); viewY = from + (y - from) * ease(k); paint(); if (k < 1) raf = requestAnimationFrame(stepf); };
+      raf = requestAnimationFrame(stepf);
     }
-    function setMode(m) { mode = m; sec.classList.toggle('featuring', m === 'feature'); sec.classList.toggle('zoomed', m === 'zoom'); }
+    function setMode(m) { mode = m; sec.classList.toggle('featuring', m === 'feature'); }
 
-    // ---- the message brought forward ----
+    // ---- the letter brought forward ----
     function placeLead() {
-      const it = mode === 'feature' && L && L.byI.get(cur);
-      if (!it || MOBILE.matches) { lead.classList.remove('on'); return; }
-      const sr = stage.getBoundingClientRect(), cr = card.getBoundingClientRect();
-      const { s, x, y } = view, ln = it.lines[0];
-      const tx = (it.x + Math.min(ln.w, L.cw) / 2) * s + x, ty = (it.y - it.fs * 0.35) * s + y;
-      const l = cr.left - sr.left - 18, r = cr.right - sr.left + 18, t = cr.top - sr.top - 18, b = cr.bottom - sr.top + 18;
-      if (tx > l && tx < r && ty > t && ty < b) { lead.classList.remove('on'); return; }   // it sits behind the card
-      let ax, ay;
-      if (tx < l) { ax = l; ay = Math.max(t + 30, Math.min(b - 30, ty)); } else if (tx > r) { ax = r; ay = Math.max(t + 30, Math.min(b - 30, ty)); }
-      else { ax = Math.max(l + 40, Math.min(r - 40, tx)); ay = ty < t ? t : b; }
-      const horiz = tx < l || tx > r;
-      const c1 = horiz ? [ax + (tx - ax) * 0.55, ay] : [ax, ay + (ty - ay) * 0.55], c2 = horiz ? [tx, ay + (ty - ay) * 0.2] : [ax + (tx - ax) * 0.2, ty];
+      const c = mode === 'feature' && layers && byI.get(cur);
+      if (!c || MOBILE.matches) { lead.classList.remove('on'); return; }
+      const sr = stage.getBoundingClientRect(), cr = card.getBoundingClientRect(), r = screenRect(c);
+      const l = cr.left - sr.left - 18, rt = cr.right - sr.left + 18, t = cr.top - sr.top - 18, b = cr.bottom - sr.top + 18;
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      if (cx > l && cx < rt && cy > t && cy < b) { lead.classList.remove('on'); return; }   // it sits behind the letter
+      // from the edge of the letter being read to the nearest edge of its card on the wall
+      let ax, ay, tx, ty;
+      if (r.x + r.w < l) { ax = l; tx = r.x + r.w; ty = cy; ay = Math.max(t + 30, Math.min(b - 30, cy)); }
+      else if (r.x > rt) { ax = rt; tx = r.x; ty = cy; ay = Math.max(t + 30, Math.min(b - 30, cy)); }
+      else { tx = cx; ty = cy < t ? r.y + r.h : r.y; ax = Math.max(l + 40, Math.min(rt - 40, cx)); ay = cy < t ? t : b; }
+      const horiz = Math.abs(tx - ax) > Math.abs(ty - ay);
+      const c1 = horiz ? [ax + (tx - ax) * 0.55, ay] : [ax, ay + (ty - ay) * 0.55], c2 = horiz ? [tx - (tx - ax) * 0.2, ty] : [tx, ty - (ty - ay) * 0.2];
       lpath.setAttribute('d', `M${ax},${ay}C${c1} ${c2} ${tx},${ty}`); ldot.setAttribute('cx', tx); ldot.setAttribute('cy', ty);
       lead.classList.add('on');
     }
     function fill(i) {
       const m = messages[i];
-      fbody.innerHTML = `<blockquote>“${marked(m)}”</blockquote><cite>${esc(m.name || 'Anonymous')}<span>${esc(m.rel || '')}${m.mine ? '<em>Pending approval · visible only to you</em>' : ''}</span></cite>`;
+      fbody.innerHTML = `<p class="feature__to">${TO}</p><blockquote>${marked(m)}</blockquote><cite>— ${esc(m.name || 'Anonymous')}<span>${esc(m.rel || '')}${m.mine ? '<em>Pending approval · visible only to you</em>' : ''}</span></cite>`;
       nEl.textContent = matches ? `${pos + 1} of ${list.length} ${list.length === 1 ? 'match' : 'matches'}` : '';
     }
     function feature(i, byScroll) {
       if (!byScroll) auto = false;
       const was = mode === 'feature', k = list.indexOf(i); if (k >= 0) pos = k;
       cur = i; hover = null;
-      const show = () => { fill(i); fbody.classList.remove('out'); };
+      const show = () => { fill(i); fbody.classList.remove('out'); requestAnimationFrame(paint); };
       if (was) { fbody.classList.add('out'); setTimeout(show, REDUCED.matches ? 0 : 260); } else show();
       setMode('feature');
-      // on a phone the panel covers the lower part of the screen, so the sheet slides to keep this message in view above it
-      const it = L.byI.get(i), oy = MOBILE.matches && it ? Math.min(0, SH * 0.2 - it.y) : 0;
-      go({ s: 1, x: 0, y: oy }, 700);
+      // on a phone the panel covers the lower part of the screen, so the wall slides to keep this letter in view above it
+      const c = byI.get(i); let y = 0;
+      if (MOBILE.matches && c) { const n = layers.findIndex(l => l.cards.includes(c)); y = Math.max(-SH * 0.6, Math.min(SH * 0.3, SH * 0.22 - (c.y + c.h / 2 + drift * layers[n].L.depth))); }
+      slideTo(y);
     }
     function step(d) { if (!list.length) return; pos = (pos + d + list.length) % list.length; feature(list[pos]); }
-    function toField() { setMode('field'); cur = -1; go({ s: 1, x: 0, y: 0 }, 600); }
-    let before = 'field';
-    function zoomAt(px, py) {
-      before = mode; setMode('zoom'); auto = false; stopPlay();
-      const s1 = MOBILE.matches ? 2.4 : 2.5, wx = (px - view.x) / view.s, wy = (py - view.y) / view.s;
-      go({ s: s1, x: px - wx * s1, y: py - wy * s1 }, 800);
-    }
-    function zoomOut() { if (before === 'feature' && cur >= 0) feature(cur); else toField(); }
-    const hit = (px, py) => {
-      if (!L) return null; const wx = (px - view.x) / view.s, wy = (py - view.y) / view.s, pad = 4 / view.s;
-      const it = L.items.find(it => wx > it.x - pad && wx < it.x + L.cw + pad && wy > it.y - it.lh - pad && wy < it.y + it.h + it.lh * 0.4 + pad);
-      return it ? it.i : null;
-    };
+    function toField() { setMode('field'); cur = -1; slideTo(0, 600); }
 
-    // ---- pointer: tap to look closer, tap a message to read it, drag to move around when close ----
-    let down = null;
-    fc.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false }; if (mode === 'zoom') fc.setPointerCapture(e.pointerId); });
+    // ---- pointer: hover lifts a letter, a click or tap opens it ----
     fc.addEventListener('pointermove', e => {
-      const r = stage.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-      if (down && mode === 'zoom') {
-        const dx = e.clientX - down.x, dy = e.clientY - down.y;
-        if (down.moved || Math.hypot(dx, dy) > 6) { down.moved = true; sec.classList.add('dragging'); view = clampView({ s: view.s, x: down.vx + dx, y: down.vy + dy }); paint(true); return; }
-      }
-      if (mode === 'zoom' && e.pointerType === 'mouse') { const h = hit(px, py); if (h !== hover) { hover = h; paint(true); } }
+      if (e.pointerType !== 'mouse') return;
+      const r = stage.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top);
+      fc.style.cursor = h != null ? 'pointer' : '';
+      if (h !== hover) { hover = h; paint(); }
     });
-    const up = e => {
-      sec.classList.remove('dragging');
-      if (!down) return; const d = down; down = null; if (d.moved || e.type === 'pointercancel') return;
-      const r = stage.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-      if (mode === 'zoom') { const h = hit(px, py); if (h != null) feature(h); }
-      else zoomAt(px, py);
-    };
-    fc.addEventListener('pointerup', up); fc.addEventListener('pointercancel', up);
-    fc.addEventListener('pointerleave', () => { if (hover != null) { hover = null; paint(true); } });
-    $('.js-zoomout').addEventListener('click', zoomOut);
+    fc.addEventListener('pointerleave', () => { if (hover != null) { hover = null; paint(); } });
+    fc.addEventListener('click', e => { const r = stage.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top); if (h != null) { stopPlay(); feature(h); } });
     $('.js-next').addEventListener('click', () => { stopPlay(); step(1); });
     $('.js-prev').addEventListener('click', () => { stopPlay(); step(-1); });
-    // swipe between messages on the panel
+    // swipe between letters on the panel
     let sw = null;
     card.addEventListener('pointerdown', e => { if (!e.target.closest('button, input, a')) sw = { x: e.clientX, y: e.clientY }; });
     card.addEventListener('pointerup', e => { if (!sw) return; const dx = e.clientX - sw.x, dy = e.clientY - sw.y; sw = null; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) { stopPlay(); step(dx < 0 ? 1 : -1); } });
     addEventListener('keydown', e => {
-      if (!inView || e.target.closest('input, textarea')) return;
-      if (e.key === 'Escape' && mode === 'zoom') zoomOut();
-      if (mode !== 'feature') return;
+      if (!inView || mode !== 'feature' || e.target.closest('input, textarea')) return;
       if (e.key === 'ArrowRight') { stopPlay(); step(1); } else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); }
     });
 
-    // ---- play: a new voice every few seconds, for a screen at the celebration ----
+    // ---- play: a new letter every few seconds, for a screen at the celebration ----
     function stopPlay() { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; }
     playBtn.addEventListener('click', () => {
       if (timer) return stopPlay();
@@ -724,10 +734,10 @@
     });
     card.addEventListener('mouseenter', () => { paused = true; }); card.addEventListener('mouseleave', () => { paused = false; });
 
-    // ---- search and facet filter, inside the sheet ----
+    // ---- search and facet filter, on the wall itself ----
     sBtn.addEventListener('click', () => {
       const open = sPanel.hidden; sPanel.hidden = !open; sBtn.setAttribute('aria-expanded', open);
-      if (open) sInput.focus({ preventScroll: true }); else { sInput.value = ''; q = ''; qf = 'all'; filter(); }
+      if (open) sInput.focus({ preventScroll: true }); else { sInput.value = ''; q = ''; qf = 'all'; chips(); filter(); }
       placeLead();
     });
     function chips() {
@@ -743,30 +753,38 @@
         list = readOrder().filter(ok); matches = new Set(list);
       }
       sec.classList.toggle('searching', !!matches);
-      if (L) renderBase();
-      if (list.length) feature(list[0]); else { nEl.textContent = 'No messages match'; }
+      if (layers) { layers.forEach(renderLayer); paint(); }
+      if (list.length) feature(list[0]); else nEl.textContent = 'No messages match';
     }
 
-    // ---- scroll: the sheet first, then one voice ----
+    // ---- scroll: the wall of letters first, then one letter ----
     function onScroll() {
       const r = sec.getBoundingClientRect(); inView = r.top < innerHeight && r.bottom > 0;
-      body.classList.toggle('on-board', r.top < innerHeight * 0.5 && r.bottom > innerHeight * 0.5);
+      body.classList.toggle('on-board', r.top < innerHeight * 0.85 && r.bottom > innerHeight * 0.15);
       if (!inView) { if (timer) stopPlay(); return; }
-      if (!L) { build(); return; }
+      if (!layers) { build(); return; }
       const p = -r.top / Math.max(1, r.height - innerHeight);
+      // the layers drift apart a little as you scroll in: the front moves most, so the wall has depth
+      drift = Math.max(-1, Math.min(1, (Math.min(1, Math.max(-0.6, p)) - 0.15) * -1.2)); paint();
       if (mode === 'field' && p > 0.3) { auto = true; feature(list[pos] ?? list[0], true); }
       else if (mode === 'feature' && auto && p < 0.12) { auto = false; toField(); }
     }
+    function arrive() {
+      // the letters settle in from the back to the front
+      const t0 = performance.now(), d = REDUCED.matches ? 1 : 1600;
+      const f = now => { reveal = Math.min(1, (now - t0) / d); paint(); if (reveal < 1) requestAnimationFrame(f); };
+      requestAnimationFrame(f);
+    }
     function build() {
       if (building) return building;
-      building = Promise.race([Promise.all(['400 10px Newsreader', '500 10px Archivo'].map(f => document.fonts.load(f))).catch(() => {}), new Promise(r => setTimeout(r, 1500))])
-        .then(() => { list = readOrder(); chips(); layout(); onScroll(); });
+      building = Promise.race([Promise.all(['400 10px Newsreader', 'italic 400 10px Newsreader', '500 10px Archivo'].map(f => document.fonts.load(f))).catch(() => {}), new Promise(r => setTimeout(r, 1500))])
+        .then(() => { list = readOrder(); chips(); layout(); arrive(); onScroll(); });
       return building;
     }
     addEventListener('scroll', onScroll, { passive: true });
-    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (!L) return; view = { s: 1, x: 0, y: 0 }; if (mode === 'zoom') setMode('field'); layout(); if (mode === 'feature') feature(cur); }, 200); });
-    // a newly written message joins the sheet and is the first voice you meet there
-    function added() { if (!L) return; list = matches ? list : readOrder(); pos = 0; layout(); }
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (!layers) return; viewY = 0; layout(); if (mode === 'feature') feature(cur); }, 200); });
+    // a newly written message joins the wall, in front, and is the first letter you meet there
+    function added() { if (!layers) return; list = matches ? list : readOrder(); pos = 0; layout(); }
     return { added };
   })();
 
