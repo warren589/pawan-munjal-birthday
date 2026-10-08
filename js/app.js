@@ -528,131 +528,138 @@
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
   // ---------------- the messages: one voice emerging from thousands ----------------
-  // A tall section with a sticky stage. Scrolling moves from one voice to the next; each one grows out of its own faint
-  // fragment in the field behind it. At the end the view pulls back and the field opens up.
+  // A sticky stage over a quiet fabric of words, set like the portraits. Scrolling brings a few voices forward: each
+  // one's words light up in the fabric in their facet's ink, and the message grows out of one of them. Then the view
+  // pulls back, the fabric opens up, and the list of every message follows.
   const board = (() => {
-    const sec = $('.voices'), stage = $('.voices__stage'), field = $('.voices__field'), stack = $('.voices__stack');
-    const nEl = $('.voices__n'), bar = $('.voices__bar');
-    const SEG = 0.85, LEAD = 0.25;      // viewport heights of scroll per voice; a little scroll before the first one changes
-    const PICK = [0, 18, 2, 12, 4, 1, 6, 3, 10, 5, 16, 17];   // a representative dozen from the demo messages
-    let seq = [], els = [], srcs = [], active = -1, timers = [], built = false;
+    const sec = $('.voices'), stage = $('.voices__stage'), fab = $('.voices__fabric'), fbx = fab.getContext('2d'), lit = $('.voices__lit'), ltx = lit.getContext('2d');
+    const stack = $('.voices__stack'), nEl = $('.voices__n'), bar = $('.voices__bar');
+    const SEG = 0.9, LEAD = 0.25;            // viewport heights of scroll per voice; a little scroll before the first one changes
+    const PICK = [0, 4, 12, 5];              // four voices: a colleague, family, the shop floor, a partner abroad
+    let seq = [], els = [], active = -1, timers = [], built = false, open = -1;
+    let words = [], SW = 0, SH = 0, D = 1, glow = new Map(), raf = 0;   // fabric words, and how lit each one is (0–1)
     const pad = n => String(n).padStart(2, '0');
     const clip = (t, max) => { if (t.length <= max) return t; const c = t.slice(0, max); return c.slice(0, c.lastIndexOf(' ')).replace(/[,.;:—-]+$/, '') + '…'; };
+    const sequence = () => [...messages.map((m, i) => i).filter(i => messages[i].mine).reverse(), ...PICK.filter(i => i < messages.length)];
 
-    function sequence() {
-      const mine = messages.map((m, i) => i).filter(i => messages[i].mine).reverse();
-      return [...mine, ...PICK.filter(i => i < messages.length)];
-    }
-    // ---- the field of fragments: short excerpts, names and dots, generated from the messages, kept to the edges ----
-    function buildField() {
-      field.innerHTML = ''; srcs = [];
-      const W = stage.clientWidth, H = stage.clientHeight, mob = MOBILE.matches, R = seeded(41);
-      const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr'));
-      // the clear zone around the voice (an ellipse): only the faintest dots may sit inside it
-      const cx = W / 2, cy = H * (mob ? 0.5 : 0.52), rx = W * (mob ? 0.62 : 0.45), ry = H * (mob ? 0.34 : H < 600 ? 0.5 : 0.38);   // short screens: the voice fills more of the height
-      const inside = (x, y) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 < 1;
-      const words = messages.filter(m => !m.mine).map(m => m.text.split(/\s+/));
-      const names = messages.filter(m => !m.mine && m.name).map(m => m.name.toUpperCase());
-      const cw = mob ? 86 : 124, ch = mob ? 26 : 32, frag = [];
-      const taken = [];
-      taken.push([W / 2 - 170, H - 64, W / 2 + 170, H]);   // keep clear of the count at the bottom
-      { const ir = $('.voices__intro').getBoundingClientRect(), sr = stage.getBoundingClientRect(); taken.push([ir.left - sr.left - 30, ir.top - sr.top - 20, ir.right - sr.left + 30, ir.bottom - sr.top + 20]); }   // and of the introduction
-      const fits = (x, y, w, h) => x >= 6 && x + w <= W - 6 && !taken.some(t => x < t[2] && x + w > t[0] && y < t[3] && y + h > t[1]);
-      const est = (cls, text) => cls[0] === 'x' ? text.length * (mob ? 4.6 : 5.6) : cls[0] === 'n' ? text.length * (mob ? 6 : 7.2) : 4;
-      const put = (cls, x, y, o, text) => {
-        const w = est(cls, text || ''), h = cls[0] === 'd' ? 4 : 14;
-        if (!fits(x - 8, y - 6, w + 16, h + 12)) return null; taken.push([x - 8, y - 6, x + w + 8, y + h + 6]);
-        const e = document.createElement('span'); e.className = 'frag ' + cls; e.style.left = x + 'px'; e.style.top = y + 'px'; e.style.setProperty('--o', o); if (text) e.textContent = text; frag.push(e); return e; };
-      // a few fixed spots at the edges where voices surface: just before a voice grows into the centre, its opening
-      // words are written into one of these and brighten, so it reads as coming out of the field
-      const spots = mob ? [[0.05, 0.86], [0.55, 0.85], [0.3, 0.9], [0.05, 0.085], [0.55, 0.085], [0.64, 0.905]]
-        : [[0.06, 0.16], [0.8, 0.12], [0.88, 0.86], [0.06, 0.86], [0.25, 0.93], [0.7, 0.93], [0.84, 0.22], [0.1, 0.25]];
-      srcs = spots.filter(([, v]) => mob || H >= 600 || v < 0.3).map(([u, v]) => { const e = put('x', u * W, v * H, mob ? 0.2 : 0.26, '“' + 'x'.repeat(mob ? 18 : 24)); if (e) e.textContent = ''; return e; }).filter(Boolean);
-      for (let y = hdr + 10; y < H - 20; y += ch) for (let x = 8; x < W - 20; x += cw) {
-        const px = x + R() * cw * 0.6, py = y + R() * ch * 0.5, r = R(), more = R() < 0.42;   // "more" ones only appear in the pull-back
-        // inside the clear zone only fragments that appear in the pull-back, once the single voice has stepped aside
-        const zone = inside(px, py) || inside(px + (mob ? 110 : 150), py + 6);   // either end of a fragment
-        if (zone && !more) { if (r < 0.12) put('d', px, py, 0.1); continue; }
-        if (R() > (mob ? 0.66 : 0.82)) continue;
-        const o = (mob ? 0.13 : 0.17) + R() * (mob ? 0.1 : 0.15);
-        if (r < 0.48) { const w = words[(R() * words.length) | 0], n = 2 + ((R() * (mob ? 2 : 3)) | 0), s0 = (R() * Math.max(1, w.length - n)) | 0; put('x' + (more ? ' more' : ''), px, py, o, (s0 ? '…' : '') + w.slice(s0, s0 + n).join(' ') + '…'); }
-        else if (r < 0.7) put('n' + (more ? ' more' : ''), px, py, o * 0.9, names[(R() * names.length) | 0]);
-        else put('d' + (more ? ' more' : ''), px + 20, py + 4, o * 0.8);
+    // ---- the fabric: rows of small capitals, the portraits' own texture, very faint ----
+    function buildFabric() {
+      const r = stage.getBoundingClientRect(); SW = r.width; SH = r.height; D = Math.min(2, devicePixelRatio || 1);
+      for (const c of [fab, lit]) { c.width = Math.round(SW * D); c.height = Math.round(SH * D); }
+      const mob = MOBILE.matches, fs = mob ? 7.6 : 9.2, lh = fs * 1.42, R = seeded(23), font = `600 ${fs}px ${window.WP_FONT}`;
+      const pool = []; messages.forEach(m => m.words.forEach(w => pool.push(w.toUpperCase()))); VOCAB.forEach(v => pool.push(v.w.toUpperCase()));
+      fbx.setTransform(D, 0, 0, D, 0, 0); fbx.clearRect(0, 0, SW, SH); fbx.font = font; fbx.fillStyle = '#1d1a17'; fbx.textBaseline = 'alphabetic';
+      if ('letterSpacing' in fbx) fbx.letterSpacing = '0.4px';
+      words = [];
+      for (let y = lh; y < SH + lh; y += lh) {
+        let x = -R() * 60;
+        while (x < SW) { const t = pool[(R() * pool.length) | 0], w = fbx.measureText(t).width; fbx.globalAlpha = 0.055 + R() * 0.045; fbx.fillText(t, x, y); words.push({ t, x, y, w, fs }); x += w + fs * 0.55; }
       }
-      frag.forEach(e => field.appendChild(e));
+      fbx.globalAlpha = 1; ltx.setTransform(D, 0, 0, D, 0, 0); ltx.font = font; if ('letterSpacing' in ltx) ltx.letterSpacing = '0.4px';
+      glow = new Map(); paintLit();
     }
-    // ---- the voices ----
+    // the clear zone around the voice: words there never light up, and a soft veil keeps the fabric back from it
+    const inZone = w => { const mob = MOBILE.matches, cx = SW / 2, cy = SH * 0.52, rx = SW * (mob ? 0.6 : 0.36), ry = SH * (mob ? 0.34 : 0.33); return ((w.x + w.w / 2 - cx) / rx) ** 2 + ((w.y - cy) / ry) ** 2 < 1; };
+    // the instances of a message's words that light up: a few of each, away from the voice and the screen edges
+    function litFor(mi) {
+      const out = [], want = new Set(messages[mi].words.map(w => w.toUpperCase())), per = new Map(), R = seeded(mi * 13 + 5);
+      const cand = words.filter(w => want.has(w.t) && !inZone(w) && w.x > 12 && w.x + w.w < SW - 12 && w.y > 80 && w.y < SH - 50);
+      for (let i = cand.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [cand[i], cand[j]] = [cand[j], cand[i]]; }
+      for (const w of cand) { const n = per.get(w.t) || 0; if (n < 2) { per.set(w.t, n + 1); out.push(w); } }
+      return out;
+    }
+    const inkOf = t => { const f = FACETS[CODES.indexOf(facetsOf(t.toLowerCase())[0])]; return f ? f.ink[0] : ACCENT; };
+    function paintLit() {
+      ltx.clearRect(0, 0, SW, SH);
+      glow.forEach((g, w) => { if (g.v < 0.01) return; ltx.globalAlpha = g.v * 0.9; ltx.fillStyle = inkOf(w.t); ltx.fillText(w.t, w.x, w.y); });
+      ltx.globalAlpha = 1;
+    }
+    // light a new set of words (and let the rest fade) over ~0.7s
+    function lightUp(set) {
+      const on = new Set(set);
+      words.forEach(w => { if (on.has(w) && !glow.has(w)) glow.set(w, { v: 0, to: 1 }); });
+      glow.forEach((g, w) => { g.to = on.has(w) ? 1 : 0; });
+      cancelAnimationFrame(raf);
+      const step = () => {
+        let busy = false;
+        glow.forEach((g, w) => { const d = g.to - g.v; if (Math.abs(d) > 0.01) { g.v += d * 0.12; busy = true; } else { g.v = g.to; if (!g.to) glow.delete(w); } });
+        paintLit(); if (busy) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }
+
+    // ---- the voices: a shortened version, and the full letter that opens in place ----
     function buildVoices() {
       const max = MOBILE.matches ? 120 : 150;
       stack.innerHTML = seq.map((mi, k) => {
-        const m = messages[mi], t = clip(m.text, max), cut = t !== m.text;
-        return `<figure class="voice" data-k="${k}" tabindex="-1" role="button" aria-label="Read the full message from ${esc(m.name || 'Anonymous')}">
-          <blockquote>“${esc(t)}”</blockquote>
+        const m = messages[mi], t = clip(m.text, max), cut = t !== m.text, codes = [...m.facets];
+        return `<figure class="voice" data-k="${k}">
+          <button class="voice__q" type="button" aria-expanded="false"><blockquote><span class="short">“${esc(t)}”</span><span class="full">“${marked(m)}”</span></blockquote></button>
           <figcaption><cite>${esc(m.name || 'Anonymous')}<span>${esc(m.rel || '')}${m.mine ? ' · <em>Pending approval, visible only to you</em>' : ''}</span></cite>
-          <span class="more-link">${cut ? 'Read the full letter' : 'Read the letter'}</span></figcaption></figure>`;
+            <p class="voice__facets">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
+            <button class="link voice__open" type="button">${cut ? 'Read the full letter' : 'Read the letter'}</button></figcaption></figure>`;
       }).join('');
       els = $$('.voice', stack);
     }
-    function build() {
-      seq = sequence(); size(); buildVoices(); buildField(); built = true; active = -1; onScroll();
+    function setOpen(k) {
+      if (open >= 0 && els[open]) { els[open].classList.remove('open'); els[open].querySelector('.voice__q').setAttribute('aria-expanded', 'false'); els[open].querySelector('.voice__open').textContent = els[open].dataset.label; }
+      open = k;
+      if (k >= 0) { const e = els[k], b = e.querySelector('.voice__open'); e.dataset.label = b.textContent; e.classList.add('open'); e.querySelector('.voice__q').setAttribute('aria-expanded', 'true'); b.textContent = 'Close'; }
     }
-    // ---- one voice emerging: its fragment brightens, then the message grows out of it into the centre ----
+    stack.addEventListener('click', e => {
+      const v = e.target.closest('.voice.on'); if (!v || !e.target.closest('.voice__q, .voice__open')) return;
+      const k = +v.dataset.k; setOpen(open === k ? -1 : k);
+    });
+
+    // ---- one voice emerging: its words light up around the edges, then it grows out of one of them ----
     function activate(k) {
       if (k === active) return;
-      timers.forEach(clearTimeout); timers = [];
-      const prev = active; active = k;
+      timers.forEach(clearTimeout); timers = []; setOpen(-1);
+      active = k;
       els.forEach((e, j) => { if (j !== k && e.classList.contains('on')) { e.classList.remove('on', 'sign'); e.classList.add('out'); timers.push(setTimeout(() => e.classList.remove('out'), 900)); } });
-      srcs.forEach(e => e.classList.remove('src'));
       nEl.textContent = pad(k + 1); bar.style.setProperty('--p', (k + 1) / seq.length);
-      const el = els[k], src = srcs.length ? srcs[k % srcs.length] : null;
-      if (src) { const W = stage.clientWidth; src.textContent = '“' + messages[seq[k]].text.split(/\s+/).slice(0, MOBILE.matches ? 3 : 4).join(' ') + '…'; src.style.left = Math.min(parseFloat(src.style.left), W - src.offsetWidth - 10) + 'px'; }
-      if (!el) return;
+      const el = els[k]; if (!el) return;
+      const set = litFor(seq[k]); lightUp(set);
+      // grow out of the lit word nearest the centre, so the trip is short and readable
+      const src = set.slice().sort((a, b) => Math.hypot(a.x - SW / 2, a.y - SH / 2) - Math.hypot(b.x - SW / 2, b.y - SH / 2))[0];
       if (src && !REDUCED.matches) {
-        src.classList.add('src');
         el.classList.remove('out'); el.style.transition = 'none'; el.style.transform = ''; el.style.opacity = '0';
-        const a = src.getBoundingClientRect(), b = el.querySelector('blockquote').getBoundingClientRect(), e = el.getBoundingClientRect();
-        const s = Math.max(0.08, Math.min(0.3, a.width / b.width));
-        el.style.transform = `translate(${a.left + a.width / 2 - (e.left + e.width / 2)}px, ${a.top + a.height / 2 - (b.top + b.height / 2)}px) scale(${s})`;
+        const sr = stage.getBoundingClientRect(), b = el.querySelector('blockquote').getBoundingClientRect(), e = el.getBoundingClientRect();
+        const s = Math.max(0.06, Math.min(0.25, src.w / b.width));
+        el.style.transform = `translate(${sr.left + src.x + src.w / 2 - (e.left + e.width / 2)}px, ${sr.top + src.y - (b.top + b.height / 2)}px) scale(${s})`;
         void el.offsetWidth;
-        timers.push(setTimeout(() => {   // a moment for the fragment to catch the eye, then it grows into the message
+        timers.push(setTimeout(() => {   // a moment for the lit words to catch the eye, then the voice grows into the centre
           el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; el.classList.add('on');
-          timers.push(setTimeout(() => src.classList.remove('src'), 700));
           timers.push(setTimeout(() => el.classList.add('sign'), 650));
-        }, 220));
+        }, 320));
       } else { el.classList.add('on'); timers.push(setTimeout(() => el.classList.add('sign'), REDUCED.matches ? 0 : 400)); }
-    }
-    stack.addEventListener('click', e => { const v = e.target.closest('.voice.on'); if (v) openMessage(seq[+v.dataset.k]); });
-    stack.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.voice.on')) { e.preventDefault(); openMessage(seq[+e.target.closest('.voice').dataset.k]); } });
-    // the full message opens in the existing bottom sheet
-    function openMessage(mi) {
-      const m = messages[mi], codes = [...m.facets];
-      sheetBody.innerHTML = `
-        <p class="eyebrow">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
-        <p class="msg-to">Dear Dr. Munjal,</p>
-        <blockquote${m.mine ? ' class="pending"' : ''}><p>${marked(m)}</p>
-          <cite>${esc(m.name || 'Anonymous')}${m.rel ? `<span>${esc(m.rel)}</span>` : ''}</cite></blockquote>
-        ${m.mine ? '<p class="fine">Your message · only you can see it until it has been approved.</p>' : ''}`;
-      show(sheet);
     }
 
     // ---- scroll drives everything ----
-    function size() { sec.style.height = Math.round(innerHeight * (LEAD + seq.length * SEG + 1.6) + innerHeight) + 'px'; }
+    function size() { sec.style.height = Math.round(innerHeight * (LEAD + seq.length * SEG + 1.4) + innerHeight) + 'px'; }
+    let wasPulled = false;
     function onScroll() {
       const r = sec.getBoundingClientRect(), vh = innerHeight;
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
       const covered = r.top <= 0; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
       const u = -r.top / vh, n = seq.length;
-      const k = Math.max(0, Math.min(n - 1, Math.floor((u - LEAD) / SEG)));
       sec.classList.toggle('reading', u > LEAD * 0.6);
-      sec.classList.toggle('pulled', u > LEAD + n * SEG + 0.15);
-      field.style.translate = `0 ${(-Math.max(0, Math.min(u, n)) * 6).toFixed(1)}px`;   // the field drifts a few pixels, no more
-      activate(k);
+      const pulled = u > LEAD + n * SEG + 0.1;
+      sec.classList.toggle('pulled', pulled);
+      if (pulled !== wasPulled) {
+        wasPulled = pulled;
+        // in the pull-back every voice's words light up together: they all belong to the same fabric
+        if (pulled) { setOpen(-1); lightUp(seq.flatMap(mi => litFor(mi))); } else { active = -1; }
+      }
+      if (!pulled) activate(Math.max(0, Math.min(n - 1, Math.floor((u - LEAD) / SEG))));
     }
-    // built straight away (it is only a few dozen elements), so the section has its full height before anyone scrolls near it
+    function build() { seq = sequence(); size(); buildVoices(); buildFabric(); built = true; active = -1; wasPulled = false; onScroll(); }
+    // built straight away, so the section has its full height before anyone scrolls near it
     build();
+    document.fonts.ready.then(() => { buildFabric(); const k = active; active = -1; if (k >= 0) activate(k); });
     addEventListener('scroll', onScroll, { passive: true });
-    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (!built) return; size(); const k = active; buildField(); active = -1; els.forEach(e => e.classList.remove('on', 'sign', 'out')); activate(Math.max(0, k)); }, 200); });
-    // a newly written message becomes the first voice in the sequence
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { size(); buildFabric(); const k = active; active = -1; els.forEach(e => e.classList.remove('on', 'sign', 'out')); if (k >= 0) activate(k); }, 200); });
+    // a newly written message becomes the first voice
     function added() { if (built) build(); }
     return { added };
   })();

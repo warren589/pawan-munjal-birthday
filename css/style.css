@@ -95,18 +95,12 @@ body.finding .note { opacity: .25 !important; }
 /* ---------- the messages: one voice emerging from thousands ---------- */
 .voices { position: relative; z-index: 3; background: var(--paper); overflow-anchor: none; }
 .voices__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
-/* the field: evidence of thousands of letters, never content to read. Fragments keep to the edges */
-.voices__field { position: absolute; inset: 0; transform-origin: 50% 55%; transition: transform 1.6s var(--ease); }
-.frag { position: absolute; white-space: nowrap; color: var(--ink-soft); opacity: var(--o); transition: opacity 1.2s var(--ease), color .8s var(--ease); }
-.frag.x { font: italic 400 12px/1 var(--serif); }
-.frag.n { font: 500 8.5px/1 var(--sans); letter-spacing: .16em; }
-.frag.d { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
-.frag.more { opacity: 0; }
-.frag.src { opacity: .95; color: var(--accent); }
-.frag.seen { opacity: calc(var(--o) * 1.6); }
-.voices.pulled .voices__field { transform: scale(.88); }
-.voices.pulled .frag { opacity: calc(var(--o) * 1.7); }
-.voices.pulled .frag.more { opacity: var(--o); }
+/* the fabric: rows of small capitals like the portraits, held back from the centre by a soft paper veil */
+.voices__fabric, .voices__lit, .voices__veil { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.voices__fabric { opacity: .85; transition: opacity 1.4s var(--ease); -webkit-mask-image: linear-gradient(transparent calc(var(--hdr) - 8px), #000 calc(var(--hdr) + 40px)); mask-image: linear-gradient(transparent calc(var(--hdr) - 8px), #000 calc(var(--hdr) + 40px)); }
+.voices__veil { background: radial-gradient(ellipse 44% 40% at 50% 52%, var(--paper) 55%, rgba(243, 238, 230, .7) 75%, rgba(243, 238, 230, 0) 100%); transition: opacity 1.4s var(--ease); }
+.voices.pulled .voices__fabric { opacity: 1; }
+.voices.pulled .voices__veil { opacity: .25; }
 /* the introduction */
 .voices__intro { position: absolute; left: 50%; top: calc(var(--hdr) + 7vh); transform: translateX(-50%); width: min(640px, 86vw); text-align: center; z-index: 2; transition: opacity .8s var(--ease), transform 1s var(--ease); }
 .voices__intro .eyebrow { margin-bottom: 14px; }
@@ -116,9 +110,17 @@ body.finding .note { opacity: .25 !important; }
 /* the active voice */
 .voices__stack { position: absolute; left: 0; right: 0; top: 34%; bottom: 14%; display: grid; place-items: center; z-index: 2; pointer-events: none; transition: top 1s var(--ease); }
 .voices.reading .voices__stack, .voices.pulled .voices__stack { top: 18%; }
-.voice { grid-area: 1 / 1; width: min(860px, 82vw); text-align: center; opacity: 0; transform-origin: 50% 50%; pointer-events: none;
+.voice { grid-area: 1 / 1; width: min(860px, 82vw); max-height: 100%; overflow-y: auto; scrollbar-width: none; text-align: center; opacity: 0; transform-origin: 50% 50%; pointer-events: none;
   transition: transform 1.35s cubic-bezier(.5, 0, .15, 1), opacity 1s var(--ease); }
-.voice.on { opacity: 1; pointer-events: auto; cursor: pointer; }
+.voice.on { opacity: 1; pointer-events: auto; }
+.voice__q { display: block; width: 100%; border: 0; padding: 0; background: none; text-align: inherit; cursor: pointer; color: inherit; }
+.voice .full, .voice__facets { display: none; }
+.voice.open .short { display: none; }
+.voice.open .full { display: inline; }
+.voice.open blockquote { font-size: clamp(22px, 2vw, 30px); line-height: 1.4; }
+.voice.open .voice__facets { display: block; }
+.voice blockquote u { text-decoration: underline; text-decoration-color: var(--u); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.voice__facets { margin: 14px 0 0; font: 500 10px/1.4 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .voice.out { opacity: 0; transform: translateY(-28px) scale(.97); transition: transform .8s var(--ease), opacity .6s var(--ease); }
 .voices.pulled .voice.on { opacity: 0; transform: scale(.92); pointer-events: none; }
 .voice blockquote { margin: 0 0 30px; font: 300 clamp(30px, 3.1vw, 46px)/1.22 var(--serif); letter-spacing: -.012em; color: var(--ink); }
@@ -127,11 +129,12 @@ body.finding .note { opacity: .25 !important; }
 .voice cite { display: block; font: normal 500 11px/1.4 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--ink); }
 .voice cite span { display: block; margin-top: 6px; font: italic 400 15px/1.3 var(--serif); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .voice cite em { font-style: normal; color: var(--accent); }
-.voice .more-link { display: inline-block; margin-top: 16px; font: 500 11px/1 var(--sans); letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 3px; transition: color .3s, border-color .3s; }
-.voice:hover .more-link { color: var(--ink); border-color: var(--ink); }
+.voice__open { margin-top: 14px; font-size: 12px; color: var(--ink-soft); }
+.voices__all { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; letter-spacing: .08em; margin-left: 10px; }
 /* the count stays in view the whole time */
 .voices__meta { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); margin: 0; display: flex; align-items: center; gap: 14px; z-index: 2;
-  font: 500 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity .6s var(--ease); }
+  font: 500 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap;
+  background: var(--paper); padding: 9px 16px; border-radius: 999px; box-shadow: 0 0 24px 12px var(--paper); transition: opacity .6s var(--ease); }
 .voices__bar { width: 90px; height: 1px; background: var(--line); position: relative; overflow: hidden; }
 .voices__bar i { position: absolute; inset: 0; background: var(--ink); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); transition: transform .6s var(--ease); }
 .voices__n { color: var(--ink); min-width: 1.6em; text-align: right; }
@@ -140,11 +143,11 @@ body.finding .note { opacity: .25 !important; }
 .voices__outro::before { content: ""; position: absolute; inset: -40% -18%; z-index: -1; background: radial-gradient(closest-side, var(--paper) 55%, rgba(243, 238, 230, 0)); }
 .voices__outro-t { margin: 0 0 18px; font: 300 clamp(30px, 3vw, 44px)/1.2 var(--serif); letter-spacing: -.01em; }
 .voices.pulled .voices__outro { opacity: 1; transform: translate(-50%, -50%); pointer-events: auto; }
-.voices.pulled .voices__meta { opacity: 0; }
+.voices.pulled .voices__meta { opacity: 0; pointer-events: none; }
 body.on-board .rail, body.on-board .findpill { opacity: 0; pointer-events: none; }
 @media (max-width: 820px), (max-width: 1100px) and (orientation: portrait) {
-  .frag.x { font-size: 10px; }
-  .frag.n { font-size: 7px; }
+  .voice.open blockquote { font-size: 19px; }
+  .voices__meta { gap: 10px; } .voices__bar { width: 44px; } .voices__all { margin-left: 4px; }
   .voices__intro { top: calc(var(--hdr) + 4vh); }
   .voices__intro .lede { font-size: 16px; }
   .voices__stack { top: 30%; bottom: 12%; }
@@ -161,7 +164,6 @@ body.on-board .rail, body.on-board .findpill { opacity: 0; pointer-events: none;
   .voices__intro { top: calc(var(--hdr) + 2vh); } .voices__intro h2 { font-size: 36px; } .voices__intro .lede { display: none; }
   .voice blockquote { font-size: 24px; margin-bottom: 14px; }
 }
-.sheet .msg-to { font: italic 400 17px/1.3 var(--serif); color: var(--muted); margin: 0 0 8px; }
 /* ---------- letters ---------- */
 .letters { position: relative; z-index: 3; background: var(--paper); padding: 18vh 24px 10vh; }
 .letters__head, .letters__body, .letters__empty, .letters > .link { max-width: 680px; margin-left: auto; margin-right: auto; }
