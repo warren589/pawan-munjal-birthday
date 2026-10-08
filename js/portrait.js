@@ -127,14 +127,15 @@
 
       const tex = canvas(cw, chh), tx = tex.getContext('2d');
       // word size follows the portrait's height so a wide group photo keeps the same type size as a tall one
-      const bodyRows = Math.round(152 * H / BH), headRows = Math.round(224 * H / BH);
+      const bodyRows = Math.round(152 * H / BH), headRows = Math.round(224 * (spec.headScale || 1) * H / BH);   // group photos: finer words in their small faces
       const body = layer(heads.length ? bodyRows : 160, 'body');
       if (heads.length) {
         const fine = layer(headRows, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
         const ell = (ctx, op) => {
-          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = op; ctx.fillStyle = '#000';
+          // feathered edge, so fine and body words blend instead of meeting at a hard line
+          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = op; ctx.fillStyle = '#000'; ctx.filter = `blur(${Math.round(4 * dpr)}px)`;
           ctx.beginPath(); heads.forEach(h => { ctx.moveTo(h[0] * cw + h[2] * cw, h[1] * chh); ctx.ellipse(h[0] * cw, h[1] * chh, h[2] * cw, h[3] * chh, 0, 0, Math.PI * 2); }); ctx.fill();
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
         };
         ell(fx, 'destination-in'); ell(bx, 'destination-out');
         tx.drawImage(body, 0, 0); tx.drawImage(fine, 0, 0);
@@ -149,9 +150,9 @@
       // thin details a row of words can't hold (a golf club): one line of tiny words set along the stroke
       (spec.strokes || []).forEach(([u0, v0, u1, v1], si) => {
         const x0 = u0 * W, y0 = v0 * H, x1 = u1 * W, y1 = v1 * H, len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
-        const fs = H / 300, col = hex(spec.ink[1]);
+        const fs = H / 165, col = hex(spec.ink[1]);
         tx.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * x0, dpr * y0);
-        tx.font = `600 ${fs}px ${FONT}`; tx.fillStyle = toHex(mix(col, [10, 10, 10], 0.3)); tx.textBaseline = 'middle';
+        tx.font = `700 ${fs}px ${FONT}`; tx.fillStyle = toHex(mix(col, [10, 10, 10], 0.3)); tx.textBaseline = 'middle';
         let p = 0, k = si;
         while (p < len) { const t = spec.words[(k++ * 7) % spec.words.length].t.toUpperCase(); tx.fillText(t, p, 0); p += tx.measureText(t).width + fs * 0.3; }
         tx.setTransform(1, 0, 0, 1, 0, 0);

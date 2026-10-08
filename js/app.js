@@ -65,7 +65,7 @@
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
-      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
+      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
       : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: state === 'final' ? FACETS.map(x => x.ink) : null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
