@@ -124,7 +124,7 @@
                 const xs = [px, px + c * w, px + sn * cap, px + c * w + sn * cap, px - sn * d, px + c * w - sn * d];
                 const ys = [y0, y0 + sn * w, y0 - c * cap, y0 + sn * w - c * cap, y0 + c * d, y0 + sn * w + c * d];
                 const bx = Math.min(...xs), by = Math.min(...ys);
-                glyphs.push({ x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by });
+                glyphs.push({ x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by, text, wt, fs, ang });
               }
               if (M(u, v0) > 0.5 && Math.abs(ang) < 0.12 && (region === 'head') === !!inHead(u, v0))
                 words.push({ x: px, y: (y0 + y1) / 2 - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)), ang });
@@ -173,7 +173,13 @@
       const shadow = canvas(cw, chh), sx = shadow.getContext('2d');
       sx.drawImage(src.shadow, 0, 0, cw, chh); sx.globalCompositeOperation = 'source-in';
       sx.fillStyle = spec.ink[1]; sx.fillRect(0, 0, cw, chh);
-      const out = { key: spec.key, tex, shadow, scene, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
+      // each travelling word keeps its tone from the portrait (sampled at its centre); shown through opacity in flight
+      for (const g of glyphs) {
+        g.tone = toneOf(L((g.x + g.w / 2) / W, (g.y + g.h / 2) / H));
+        g.font = `${g.wt} ${g.fs}px ${FONT}`;
+        g.sp = this.sprite(g.text, g.font, g.fs, dpr, spec.ink[1]);   // prepared now, in this portrait's ink, so the shuffle never pauses
+      }
+      const out = { key: spec.key, ink: spec.ink[1], tex, shadow, scene, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -294,9 +300,33 @@
     }
 
     // e: 0 → portrait A, 1 → portrait B. Each word travels to its partner's place and becomes that word on the way.
-    drawShuffle(ctx, A, B, e, dpr) {
-      const P = this.pairs(A, B), span = 0.55, ta = A.tex, tb = B.tex, da = A.dpr, db = B.dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Each distinct word (text + weight + size) drawn once, in black, into shared sheets; the shuffle copies from these.
+    sprite(text, font, fs, dpr, ink = '#000') {
+      const A = this.atlas || (this.atlas = { pages: [], map: new Map() });
+      const key = dpr + '|' + ink + '|' + font + '|' + text; let sp = A.map.get(key);
+      if (sp) return sp;
+      let pg = A.pages[A.pages.length - 1];
+      if (!pg || pg.dpr !== dpr) { pg = { c: canvas(2048, 2048), x: 0, y: 0, row: 0, dpr }; pg.x2 = pg.c.getContext('2d'); A.pages.push(pg); }
+      const x = pg.x2; x.font = font;
+      const w = Math.ceil(x.measureText(text).width) + 2, h = Math.ceil(fs * 1.3) + 2, pw = Math.ceil(w * dpr), ph = Math.ceil(h * dpr);
+      if (pg.x + pw > 2048) { pg.x = 0; pg.y += pg.row + 1; pg.row = 0; }
+      if (pg.y + ph > 2048) { pg = { c: canvas(2048, 2048), x: 0, y: 0, row: 0, dpr }; pg.x2 = pg.c.getContext('2d'); A.pages.push(pg); return this.sprite(text, font, fs, dpr, ink); }
+      x.setTransform(dpr, 0, 0, dpr, pg.x, pg.y); x.font = font; x.fillStyle = ink; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(text, w / 2, h / 2); x.setTransform(1, 0, 0, 1, 0, 0);
+      sp = { c: pg.c, sx: pg.x, sy: pg.y, sw: pw, sh: ph, w, h };
+      pg.x += pw + 1; pg.row = Math.max(pg.row, ph);
+      A.map.set(key, sp); return sp;
+    }
+
+    // e: 0 → portrait A, 1 → portrait B. Each word travels to its partner's place and becomes that word on the way.
+    // Words are drawn as words (one sprite each), darkness from opacity, then each portrait's travellers are tinted in its ink.
+    drawShuffle(ctx, A, B, e, dpr, mul = 1) {
+      const P = this.pairs(A, B), span = 0.55;
+      ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const put = (g, cx, cy, a) => {
+        const sp = g.sp; ctx.globalAlpha = a * mul * (0.35 + 0.65 * g.tone);
+        ctx.drawImage(sp.c, sp.sx, sp.sy, sp.sw, sp.sh, cx - sp.w / 2, cy - sp.h / 2, sp.w, sp.h);
+      };
       for (let k = 0; k < P.length; k++) {
         const p = P[k];
         let t = (e - p.d * (1 - span)) / span; if (t <= 0) t = 0; else if (t >= 1) t = 1;
@@ -304,13 +334,13 @@
         const cx = p.a.cx + (p.b.cx - p.a.cx) * m + bump * p.arc * 0.2;
         const cy = p.a.cy + (p.b.cy - p.a.cy) * m + bump * p.arc * 0.6;
         let q = (m - 0.3) / 0.4; q = q < 0 ? 0 : q > 1 ? 1 : q;   // which word it reads as, mid-flight
-        // in flight the words thin out slightly, so the cloud stays airy instead of muddy
-        const air = 1 - 0.35 * bump;
-        const aa = p.aMain ? (1 - q) * air : 0, ab = p.bMain ? q * air : 0;
-        if (aa > 0.01) { const g = p.a.g; ctx.globalAlpha = aa; ctx.drawImage(ta, g.x * da, g.y * da, g.w * da, g.h * da, cx - g.w / 2, cy - g.h / 2, g.w, g.h); }
-        if (ab > 0.01) { const g = p.b.g; ctx.globalAlpha = ab; ctx.drawImage(tb, g.x * db, g.y * db, g.w * db, g.h * db, cx - g.w / 2, cy - g.h / 2, g.w, g.h); }
+        // lighter in flight so the cloud stays airy; the tiny head words most of all, or they pile into smudges
+        const fs = p.a.g.fs < p.b.g.fs ? p.a.g.fs : p.b.g.fs, small = fs >= 11 ? 0 : fs <= 6 ? 1 : (11 - fs) / 5;
+        const air = 1 - (0.3 + 0.5 * small) * bump;
+        if (p.aMain && q < 0.99) put(p.a.g, cx, cy, (1 - q) * air);
+        if (p.bMain && q > 0.01) put(p.b.g, cx, cy, q * air);
       }
-      ctx.globalAlpha = 1;
+      ctx.restore();
     }
 
     hit(L, x, y, pad = 0) {
