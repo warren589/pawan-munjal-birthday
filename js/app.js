@@ -200,7 +200,7 @@
 
   let raf = 0, current = null;
   function frameDraw() {
-    raf = 0; if (!ready) return;
+    raf = 0; if (!ready || body.classList.contains('stage-covered')) return;   // the board and letters cover the portrait entirely
     const now = performance.now();
     find += (findTarget - find) * 0.15; if (Math.abs(findTarget - find) < 0.003) find = findTarget;
     const b = blend(); view = { ...b, state: b.e < 0.5 ? b.a : b.b };
@@ -534,7 +534,7 @@
     const sPanel = $('.board__search'), sInput = sPanel.querySelector('input'), sFilters = sPanel.querySelector('.filters'), playBtn = $('.js-play'), sBtn = $('.js-bsearch');
     const INK = '#1d1a17', MUTED = '#8a8279', CARD = '#faf7f1', TO = 'Dear Dr. Munjal,';
     let SW = 0, SH = 0, D = 1, layers = null, byI = new Map(), building = null;
-    let viewY = 0, drift = 0, reveal = 0, raf = 0;
+    let viewY = 0, drift = 0, reveal = 0, raf = 0, hiDirty = false;
     let mode = 'field', auto = false, cur = -1, pos = 0, hover = null, q = '', qf = 'all', matches = null, list = [], timer = null, inView = false, paused = false;
     let shuffled = null;
     function fieldOrder() {
@@ -596,16 +596,33 @@
         }
         return { L, cards, canvas: null };
       }).reverse();
-      layers.forEach(renderLayer);
-      paint();
+      let n = 0; const next = () => renderLayer(layers[n++], () => { if (n < layers.length) requestAnimationFrame(next); });
+      next();
     }
+    // paper grain for the cards: fine speckle plus a soft, uneven tone, made once and laid over each card very lightly
+    let grain = null;
+    function grainFor(ctx) {
+      if (!grain) {
+        const n = 256, c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), id = g.createImageData(n, n), R = seeded(9);
+        for (let i = 0; i < n * n; i++) { const v = R(), dark = v < 0.5; id.data[i * 4] = dark ? 70 : 255; id.data[i * 4 + 1] = dark ? 55 : 250; id.data[i * 4 + 2] = dark ? 40 : 240; id.data[i * 4 + 3] = Math.round(Math.abs(v - 0.5) * 2 * (dark ? 9 : 14)); }
+        g.putImageData(id, 0, 0);
+        const m = document.createElement('canvas'); m.width = m.height = 24; const mg = m.getContext('2d'), md = mg.createImageData(24, 24);
+        for (let i = 0; i < 576; i++) { const lt = R() < 0.5; md.data[i * 4] = lt ? 255 : 140; md.data[i * 4 + 1] = lt ? 252 : 118; md.data[i * 4 + 2] = lt ? 245 : 92; md.data[i * 4 + 3] = Math.round(R() * (lt ? 16 : 8)); }
+        mg.putImageData(md, 0, 0); g.imageSmoothingQuality = 'high'; g.drawImage(m, 0, 0, n, n);   // soft mottling, like fibre in the paper
+        grain = c;
+        document.documentElement.style.setProperty('--grain', `url(${c.toDataURL()})`);   // the open letter uses the same paper
+      }
+      const pat = ctx.createPattern(grain, 'repeat'); pat.setTransform(new DOMMatrix([1 / D, 0, 0, 1 / D, 0, 0])); return pat;
+    }
+    const fitText = (ctx, t, w) => { if (ctx.measureText(t).width <= w) return t; while (t.length > 1 && ctx.measureText(t + '…').width > w) t = t.slice(0, -1); return t.trimEnd() + '…'; };
     function rr(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
     function drawCard(ctx, c, a, hi) {
       const { L } = c, fs = L.fs, x = c.x, y = c.y, front = !!L.spots;
       ctx.globalAlpha = a;
-      ctx.shadowColor = `rgba(29,26,23,${hi ? 0.16 : front ? 0.09 : 0.06})`; ctx.shadowBlur = (hi ? 26 : front ? 18 : 8) * D; ctx.shadowOffsetY = (hi ? 10 : front ? 6 : 2) * D;
+      ctx.shadowColor = hi || L.a > 0.5 ? `rgba(29,26,23,${hi ? 0.16 : front ? 0.09 : 0.06})` : 'transparent'; ctx.shadowBlur = (hi ? 26 : front ? 18 : 8) * D; ctx.shadowOffsetY = (hi ? 10 : front ? 6 : 2) * D;
       ctx.fillStyle = CARD; rr(ctx, x, y, c.w, c.h, fs * 0.45); ctx.fill();
       ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.fillStyle = grainFor(ctx); ctx.fill();
       ctx.lineWidth = hi === 'accent' ? 1.2 : 0.6; ctx.strokeStyle = hi === 'accent' ? ACCENT : 'rgba(29,26,23,.1)'; ctx.stroke();
       // a small mark in the facet's ink, like a postage stamp
       const code = [...c.m.facets][0], f = FACETS[CODES.indexOf(code)];
@@ -620,24 +637,33 @@
         ty += c.lh * 0.15;
         ctx.font = `500 ${(fs * 0.74).toFixed(2)}px Archivo`; ctx.fillStyle = INK;
         if ('letterSpacing' in ctx) ctx.letterSpacing = `${(fs * 0.08).toFixed(2)}px`;
-        ctx.fillText('— ' + (c.m.name || 'Anonymous').toUpperCase(), x + c.pad, ty);
+        ctx.fillText(fitText(ctx, '— ' + (c.m.name || 'Anonymous').toUpperCase(), c.w - c.pad * 2), x + c.pad, ty);
         if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-        if (L.rel && c.m.rel) { ty += c.lh * 0.85; ctx.font = `400 ${(fs * 0.74).toFixed(2)}px Archivo`; ctx.fillStyle = MUTED; ctx.fillText(c.m.rel, x + c.pad, ty); }
+        if (L.rel && c.m.rel) { ty += c.lh * 0.85; ctx.font = `400 ${(fs * 0.74).toFixed(2)}px Archivo`; ctx.fillStyle = MUTED; ctx.fillText(fitText(ctx, c.m.rel, c.w - c.pad * 2), x + c.pad, ty); }
       }
       ctx.globalAlpha = 1;
     }
-    function renderLayer(ly) {
-      const c = ly.canvas || (ly.canvas = document.createElement('canvas'));
-      c.width = Math.round(SW * D); c.height = Math.round((SH + MARGIN * 2) * D);
+    // cards are drawn in small slices across frames, into a fresh canvas that replaces the old one when complete,
+    // so arriving at the board or searching never blocks scrolling
+    function renderLayer(ly, done) {
+      const c = document.createElement('canvas'); c.width = Math.round(SW * D); c.height = Math.round((SH + MARGIN * 2) * D);
       const x = c.getContext('2d'); x.setTransform(D, 0, 0, D, 0, MARGIN * D);
-      for (const cd of ly.cards) drawCard(x, cd, matches && !matches.has(cd.i) ? 0.18 : 1);
-      // farther layers are washed towards the paper rather than made see-through, so cards overlap like a real stack
-      if (ly.L.a < 1) { x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 1 - ly.L.a; x.fillStyle = '#f3eee6'; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; }
+      const gen = ly.gen = (ly.gen || 0) + 1; let k = 0;
+      const slice = () => {
+        if (gen !== ly.gen) return;   // superseded by a newer render
+        const t0 = performance.now();
+        while (k < ly.cards.length && performance.now() - t0 < 10) { const cd = ly.cards[k++]; drawCard(x, cd, matches && !matches.has(cd.i) ? 0.18 : 1); }
+        if (k < ly.cards.length) return requestAnimationFrame(slice);
+        // farther layers are washed towards the paper rather than made see-through, so cards overlap like a real stack
+        if (ly.L.a < 1) { x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 1 - ly.L.a; x.fillStyle = '#f3eee6'; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; }
+        ly.canvas = c; ly.ready = true; paint(); done && done();
+      };
+      slice();
     }
     // where a layer sits right now: its drift with the scroll, the reveal, and (on a phone) the slide that keeps
     // the featured letter above the panel
     const layerY = (n, ly) => viewY + drift * ly.L.depth + (1 - easeOut(Math.min(1, Math.max(0, reveal * 1.6 - n * 0.3)))) * 14 * (n + 1);
-    const layerA = n => Math.min(1, Math.max(0, reveal * 1.6 - n * 0.3));
+    const layerA = n => layers[n].canvas && layers[n].ready ? Math.min(1, Math.max(0, reveal * 1.6 - n * 0.3)) : 0;
     const easeOut = t => 1 - Math.pow(1 - t, 3);
     function paint() {
       if (!layers) return;
@@ -645,7 +671,8 @@
       layers.forEach((ly, n) => { const a = layerA(n); if (a > 0.003) { fx.globalAlpha = a; fx.drawImage(ly.canvas, 0, Math.round((layerY(n, ly) - MARGIN) * D)); } });
       fx.globalAlpha = 1;
       // lifted letters (hovered, or the one being read) sit on their own layer, so they stay clear when the wall dims
-      hx.setTransform(1, 0, 0, 1, 0, 0); hx.clearRect(0, 0, hc.width, hc.height);
+      const lifted = (hover != null && hover !== cur) || (mode === 'feature' && cur >= 0);
+      if (lifted || hiDirty) { hx.setTransform(1, 0, 0, 1, 0, 0); hx.clearRect(0, 0, hc.width, hc.height); hiDirty = lifted; }
       const lift = (i, kind) => { const c = byI.get(i); if (!c) return; const n = layers.findIndex(l => l.cards.includes(c)); hx.setTransform(D, 0, 0, D, 0, (layerY(n, layers[n]) - (kind === 'hover' ? 3 : 0)) * D); drawCard(hx, c, 1, kind === 'feature' ? 'accent' : true); };
       if (hover != null && hover !== cur) lift(hover, 'hover');
       if (mode === 'feature' && cur >= 0) lift(cur, 'feature');
@@ -753,7 +780,7 @@
         list = readOrder().filter(ok); matches = new Set(list);
       }
       sec.classList.toggle('searching', !!matches);
-      if (layers) { layers.forEach(renderLayer); paint(); }
+      if (layers) layers.forEach(ly => renderLayer(ly));
       if (list.length) feature(list[0]); else nEl.textContent = 'No messages match';
     }
 
@@ -761,24 +788,31 @@
     function onScroll() {
       const r = sec.getBoundingClientRect(); inView = r.top < innerHeight && r.bottom > 0;
       body.classList.toggle('on-board', r.top < innerHeight * 0.85 && r.bottom > innerHeight * 0.15);
+      const covered = r.top <= 0; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
+      // leaving the board upwards resets it, so coming back starts again from the wall of letters
+      if (r.top > innerHeight * 0.95 && layers && mode === 'feature' && !timer) { auto = false; setMode('field'); cur = -1; viewY = 0; paint(); }
       if (!inView) { if (timer) stopPlay(); return; }
       if (!layers) { build(); return; }
       const p = -r.top / Math.max(1, r.height - innerHeight);
       // the layers drift apart a little as you scroll in: the front moves most, so the wall has depth
-      drift = Math.max(-1, Math.min(1, (Math.min(1, Math.max(-0.6, p)) - 0.15) * -1.2)); paint();
+      const d = (0.15 - Math.min(0.3, Math.max(-0.6, p))) * 1.2;
+      if (Math.abs(d - drift) > 0.002) { drift = d; paint(); }
       if (mode === 'field' && p > 0.3) { auto = true; feature(list[pos] ?? list[0], true); }
       else if (mode === 'feature' && auto && p < 0.12) { auto = false; toField(); }
     }
     function arrive() {
       // the letters settle in from the back to the front
-      const t0 = performance.now(), d = REDUCED.matches ? 1 : 1600;
-      const f = now => { reveal = Math.min(1, (now - t0) / d); paint(); if (reveal < 1) requestAnimationFrame(f); };
+      let t0 = 0; const d = REDUCED.matches ? 1 : 1600;
+      const f = now => {
+        if (!layers[0].ready) return requestAnimationFrame(f);   // start once the back layer is drawn
+        t0 = t0 || now; reveal = Math.min(1, (now - t0) / d); paint(); if (reveal < 1) requestAnimationFrame(f);
+      };
       requestAnimationFrame(f);
     }
     function build() {
       if (building) return building;
       building = Promise.race([Promise.all(['400 10px Newsreader', 'italic 400 10px Newsreader', '500 10px Archivo'].map(f => document.fonts.load(f))).catch(() => {}), new Promise(r => setTimeout(r, 1500))])
-        .then(() => { list = readOrder(); chips(); layout(); arrive(); onScroll(); });
+        .then(() => { grainFor(fx); list = readOrder(); chips(); layout(); arrive(); onScroll(); });
       return building;
     }
     addEventListener('scroll', onScroll, { passive: true });
