@@ -103,6 +103,7 @@
   // ---------------- stage ----------------
   const wp = new window.WordPortraits(), cv = $('.portrait'), ctx = cv.getContext('2d'), frame = $('.frame'), loupe = $('.loupe');
   let W = 0, H = 0, dpr = 1, ready = false;
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
   const MOBILE = window.matchMedia('(max-width: 820px), (max-width: 1100px) and (orientation: portrait)');
   function geometry() {
     const vw = innerWidth, vh = innerHeight;
@@ -128,19 +129,22 @@
     let i = 0; while (i < cs.length - 1 && cs[i + 1] <= vc) i++;
     if (i === cs.length - 1) { const s = secs[i].dataset.state; return { a: s, b: s, e: 0 }; }
     const t = (vc - cs[i]) / (cs[i + 1] - cs[i]);
-    return { a: secs[i].dataset.state, b: secs[i + 1].dataset.state, e: smooth(0.28, 0.72, t) };
+    // the shuffle gets a wide stretch of scroll, so it can be scrubbed slowly
+    return { a: secs[i].dataset.state, b: secs[i + 1].dataset.state, e: Math.min(1, Math.max(0, (t - 0.14) / 0.72)) };
   }
 
-  function drawPortrait(s, alpha, dy, scale, now) {
+  function drawPortrait(s, alpha, dy, scale, now, noTex) {
     if (alpha <= 0.002) return false;
     const L = layoutFor(s); let anim = false;
     ctx.save();
     ctx.translate(W / 2, H / 2 + dy); ctx.scale(scale, scale); ctx.translate(-W / 2, -H / 2);
     ctx.translate(L.ox, L.oy);
-    ctx.globalAlpha = alpha * 0.09 * (1 - find);
-    ctx.drawImage(L.shadow, L.W * 0.012, L.H * 0.014, L.W, L.H);
-    ctx.globalAlpha = alpha * (1 - 0.78 * find);
-    ctx.drawImage(L.tex, 0, 0, L.W, L.H);
+    if (!noTex) {
+      ctx.globalAlpha = alpha * 0.09 * (1 - find);
+      ctx.drawImage(L.shadow, L.W * 0.012, L.H * 0.014, L.W, L.H);
+      ctx.globalAlpha = alpha * (1 - 0.78 * find);
+      ctx.drawImage(L.tex, 0, 0, L.W, L.H);
+    }
     // visitor words sit in the fabric at word size, in the one accent ink
     ctx.textBaseline = 'alphabetic';
     for (const v of visitor) {
@@ -201,8 +205,20 @@
     const b = blend(); view = { ...b, state: b.e < 0.5 ? b.a : b.b };
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     let anim = find !== findTarget;
-    anim = drawPortrait(b.a, 1 - b.e, -16 * b.e, 1 - 0.02 * b.e, now) || anim;
-    if (b.b !== b.a) anim = drawPortrait(b.b, b.e, 16 * (1 - b.e), 1.02 - 0.02 * b.e, now) || anim;
+    if (b.b !== b.a && b.e > 0 && b.e < 1 && !REDUCED.matches) {
+      // shuffle: every word of one portrait travels into the next and becomes one of its words
+      const A = layoutFor(b.a), B = layoutFor(b.b);
+      ctx.globalAlpha = 0.09 * (1 - b.e); ctx.drawImage(A.shadow, A.ox + A.W * 0.012, A.oy + A.H * 0.014, A.W, A.H);
+      ctx.globalAlpha = 0.09 * b.e; ctx.drawImage(B.shadow, B.ox + B.W * 0.012, B.oy + B.H * 0.014, B.W, B.H);
+      ctx.globalAlpha = 1;
+      wp.drawShuffle(ctx, A, B, b.e, dpr);
+      const fadeA = Math.max(0, 1 - b.e * 4), fadeB = Math.max(0, b.e * 4 - 3);   // visitor words step aside during the shuffle
+      anim = drawPortrait(b.a, fadeA, 0, 1, now, true) || anim;
+      anim = drawPortrait(b.b, fadeB, 0, 1, now, true) || anim;
+    } else if (b.b !== b.a) {
+      anim = drawPortrait(b.a, 1 - b.e, 0, 1, now) || anim;
+      anim = drawPortrait(b.b, b.e, 0, 1, now) || anim;
+    } else anim = drawPortrait(b.a, 1, 0, 1, now) || anim;
     syncState(view.state);
     // the line is only there while a facet is settled; it fades through the crossfade
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));

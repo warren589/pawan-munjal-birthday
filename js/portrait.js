@@ -87,7 +87,7 @@
       const heads = spec.img ? (spec.heads || []) : [];
       const inHead = (u, v) => heads.some(h => ((u - h[0]) / h[2]) ** 2 + ((v - h[1]) / h[3]) ** 2 < 1);
       const cw = Math.round(W * dpr), chh = Math.round(H * dpr), R = rng(spec.seed || 7);
-      const words = [];
+      const words = [], glyphs = [];   // glyphs: every word set, kept as a sprite for the shuffle between facets
 
       // two full layers, one per word size; the head ellipse decides which one shows where
       const layer = (rows, region) => {
@@ -118,6 +118,14 @@
               x.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * px, dpr * y0);
               x.fillText(text, 0, 0);
               x.setTransform(dpr, 0, 0, dpr, 0, 0);
+              if ((region === 'head') === !!inHead(u, v0)) {
+                // axis-aligned box around the (slightly rotated) word: baseline to cap height
+                const c = Math.cos(ang), sn = Math.sin(ang), cap = fs * 0.78, d = fs * 0.06;
+                const xs = [px, px + c * w, px + sn * cap, px + c * w + sn * cap, px - sn * d, px + c * w - sn * d];
+                const ys = [y0, y0 + sn * w, y0 - c * cap, y0 + sn * w - c * cap, y0 + c * d, y0 + sn * w + c * d];
+                const bx = Math.min(...xs), by = Math.min(...ys);
+                glyphs.push({ x: bx, y: by, w: Math.max(...xs) - bx, h: Math.max(...ys) - by });
+              }
               if (M(u, v0) > 0.5 && Math.abs(ang) < 0.12 && (region === 'head') === !!inHead(u, v0))
                 words.push({ x: px, y: (y0 + y1) / 2 - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)), ang });
             }
@@ -164,7 +172,7 @@
       const shadow = canvas(cw, chh), sx = shadow.getContext('2d');
       sx.drawImage(src.shadow, 0, 0, cw, chh); sx.globalCompositeOperation = 'source-in';
       sx.fillStyle = spec.ink[1]; sx.fillRect(0, 0, cw, chh);
-      const out = { key: spec.key, tex, shadow, words, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
+      const out = { key: spec.key, tex, shadow, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -213,6 +221,51 @@
       const slot = { ...best, text };
       L.slots.set(id, slot);
       return slot;
+    }
+
+    // Pair the words of two portraits for the shuffle. Pairing by (noisy) height keeps most journeys short,
+    // so the words reflow from one photograph into the next instead of exploding.
+    pairs(A, B) {
+      const key = A.key + '>' + B.key + '|' + A.BW + 'x' + A.BH;
+      if (this.cache.has(key)) return this.cache.get(key);
+      const R = rng(A.glyphs.length * 31 + B.glyphs.length * 7);
+      const order = (L, ox, oy) => L.glyphs.map(g => ({ g, cx: ox + g.x + g.w / 2, cy: oy + g.y + g.h / 2, k: oy + g.y + R() * L.BH * 0.22 }))
+        .sort((p, q) => p.k - q.k);
+      const a = order(A, A.ox, A.oy), b = order(B, B.ox, B.oy), n = Math.max(a.length, b.length);
+      const out = new Array(n); let pa = -1, pb = -1;
+      for (let k = 0; k < n; k++) {
+        const ia = Math.floor(k * a.length / n), ib = Math.floor(k * b.length / n);
+        const ga = a[ia], gb = b[ib];
+        out[k] = {
+          a: ga, b: gb, aMain: ia !== pa, bMain: ib !== pb,
+          // re-form top to bottom, with some randomness so it never moves as one block
+          d: Math.min(1, Math.max(0, (gb.cy / B.BH) * 0.55 + R() * 0.45)),
+          arc: (R() - 0.5) * B.BH * 0.12, rot: (R() - 0.5) * 0.6
+        };
+        pa = ia; pb = ib;
+      }
+      this.cache.set(key, out);
+      return out;
+    }
+
+    // e: 0 → portrait A, 1 → portrait B. Each word travels to its partner's place and becomes that word on the way.
+    drawShuffle(ctx, A, B, e, dpr) {
+      const P = this.pairs(A, B), span = 0.55, ta = A.tex, tb = B.tex, da = A.dpr, db = B.dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      for (let k = 0; k < P.length; k++) {
+        const p = P[k];
+        let t = (e - p.d * (1 - span)) / span; if (t <= 0) t = 0; else if (t >= 1) t = 1;
+        const m = t * t * (3 - 2 * t), bump = Math.sin(Math.PI * m);
+        const cx = p.a.cx + (p.b.cx - p.a.cx) * m + bump * p.arc * 0.2;
+        const cy = p.a.cy + (p.b.cy - p.a.cy) * m + bump * p.arc * 0.6;
+        let q = (m - 0.3) / 0.4; q = q < 0 ? 0 : q > 1 ? 1 : q;   // which word it reads as, mid-flight
+        // in flight the words thin out slightly, so the cloud stays airy instead of muddy
+        const air = 1 - 0.35 * bump;
+        const aa = p.aMain ? (1 - q) * air : 0, ab = p.bMain ? q * air : 0;
+        if (aa > 0.01) { const g = p.a.g; ctx.globalAlpha = aa; ctx.drawImage(ta, g.x * da, g.y * da, g.w * da, g.h * da, cx - g.w / 2, cy - g.h / 2, g.w, g.h); }
+        if (ab > 0.01) { const g = p.b.g; ctx.globalAlpha = ab; ctx.drawImage(tb, g.x * db, g.y * db, g.w * db, g.h * db, cx - g.w / 2, cy - g.h / 2, g.w, g.h); }
+      }
+      ctx.globalAlpha = 1;
     }
 
     hit(L, x, y, pad = 0) {
