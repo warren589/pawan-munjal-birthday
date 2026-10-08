@@ -29,11 +29,19 @@
 
   function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   async function load(src) { const i = new Image(); i.src = src; await i.decode(); return i; }
-  function field(img) {
+  function field(img, ch = 0) {
     const c = canvas(img.width, img.height), x = c.getContext('2d'); x.drawImage(img, 0, 0);
     const d = x.getImageData(0, 0, c.width, c.height).data, out = new Float32Array(c.width * c.height);
-    for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
+    for (let i = 0; i < out.length; i++) out[i] = d[i * 4 + ch] / 255;
     return { w: c.width, h: c.height, d: out, img: c };
+  }
+  // a real alpha mask (the PNG itself is opaque), so trimming leaves a clean anti-aliased contour
+  function alphaOf(f, blur = 0) {
+    const c = canvas(f.w, f.h), x = c.getContext('2d'), id = x.createImageData(f.w, f.h);
+    for (let i = 0; i < f.d.length; i++) { id.data[i * 4 + 3] = Math.round(f.d[i] * 255); }
+    x.putImageData(id, 0, 0);
+    if (!blur) return c;
+    const b = canvas(f.w, f.h), bx = b.getContext('2d'); bx.filter = `blur(${blur}px)`; bx.drawImage(c, 0, 0); return b;
   }
   const sample = f => (u, v) => f.d[Math.min(f.h - 1, Math.max(0, (v * f.h) | 0)) * f.w + Math.min(f.w - 1, Math.max(0, (u * f.w) | 0))];
 
@@ -41,21 +49,31 @@
     constructor() { this.src = {}; this.cache = new Map(); }
 
     async init(portraits) {
-      for (const [k, v] of Object.entries(portraits)) {
+      // decode every photograph in parallel; the heavier per-pixel preparation happens on first use
+      this.raw = {};
+      await Promise.all(Object.entries(portraits).map(async ([k, v]) => {
         const [lum, mask] = await Promise.all([load(v.lum), load(v.mask)]);
-        this.src[k] = { lum: field(lum), mask: field(mask), aspect: lum.width / lum.height };
-      }
-      // placeholder: a soft, featureless silhouette of the studio portrait, for facets awaiting photography
-      const s = this.src.studio, gl = canvas(s.mask.w, s.mask.h), gx = gl.getContext('2d');
-      gx.filter = 'blur(14px)'; gx.drawImage(s.mask.img, 0, 0); gx.filter = 'none';
-      gx.globalCompositeOperation = 'source-in';
-      const gr = gx.createLinearGradient(0, 0, 0, gl.height); gr.addColorStop(0, '#d8d8d8'); gr.addColorStop(1, '#9a9a9a');
-      gx.fillStyle = gr; gx.fillRect(0, 0, gl.width, gl.height);
-      gx.globalCompositeOperation = 'destination-over'; gx.fillStyle = '#fff'; gx.fillRect(0, 0, gl.width, gl.height);
-      this.src.ghost = { lum: field(gl), mask: s.mask, ghost: true, aspect: s.aspect };
+        this.raw[k] = { lum, mask, aspect: lum.width / lum.height };
+      }));
     }
 
-    aspect(spec) { return this.src[spec.img || 'ghost'].aspect; }
+    get(k) {
+      if (this.src[k]) return this.src[k];
+      if (k === 'ghost') {
+        // placeholder: a soft, featureless silhouette of the studio portrait, for facets awaiting photography
+        const s = this.get('studio'), gl = canvas(s.mask.w, s.mask.h), gx = gl.getContext('2d');
+        gx.filter = 'blur(14px)'; gx.drawImage(s.alpha, 0, 0); gx.filter = 'none';
+        gx.globalCompositeOperation = 'source-in';
+        const gr = gx.createLinearGradient(0, 0, 0, gl.height); gr.addColorStop(0, '#d8d8d8'); gr.addColorStop(1, '#9a9a9a');
+        gx.fillStyle = gr; gx.fillRect(0, 0, gl.width, gl.height);
+        gx.globalCompositeOperation = 'destination-over'; gx.fillStyle = '#fff'; gx.fillRect(0, 0, gl.width, gl.height);
+        return (this.src.ghost = { ...s, lum: field(gl), ghost: true });
+      }
+      const r = this.raw[k], m = field(r.mask, 0);
+      return (this.src[k] = { lum: field(r.lum), mask: m, depth: field(r.mask, 1), alpha: alphaOf(m), shadow: alphaOf(m, Math.round(m.w / 70)), aspect: r.aspect });
+    }
+
+    aspect(spec) { return this.raw[spec.img || 'studio'].aspect; }
 
     // spec: { key, img, heads:[[cx,cy,rx,ry]...]|null, ink:[mid,dark], words:[{t,m}], seed }
     // W x H is the box the portrait must fit; the portrait keeps its photograph's aspect and sits bottom-centre.
@@ -65,7 +83,7 @@
       W = Math.round(W); H = Math.round(H);
       const ck = `${spec.key}|${BW}x${BH}@${dpr}`;
       if (this.cache.has(ck)) return this.cache.get(ck);
-      const src = this.src[spec.img || 'ghost'], L = sample(src.lum), M = sample(src.mask);
+      const src = this.get(spec.img || 'ghost'), L = sample(src.lum), M = sample(src.mask), D = sample(src.depth);
       const heads = spec.img ? (spec.heads || []) : [];
       const inHead = (u, v) => heads.some(h => ((u - h[0]) / h[2]) ** 2 + ((v - h[1]) / h[3]) ** 2 < 1);
       const cw = Math.round(W * dpr), chh = Math.round(H * dpr), R = rng(spec.seed || 7);
@@ -76,23 +94,30 @@
         const c = canvas(cw, chh), x = c.getContext('2d');
         x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
         const lh = H / rows, fs = lh * 1.2, space = fs * 0.28;
+        // rows arch over the body like contour lines: lifted where the figure is deep, flat at its edges
+        const amp = lh * 2.2, base = (px, y) => y - amp * D(Math.min(1, Math.max(0, px / W)), Math.min(1, Math.max(0, y / H)));
         const font = wt => `${wt} ${fs}px ${FONT}`;
         const widths = new Map();
         const measure = (w, wt) => { const k = wt + w; let v = widths.get(k); if (v === undefined) { x.font = font(wt); v = x.measureText(w).width; widths.set(k, v); } return v; };
-        for (let y = lh * 0.92, row = 0; y < H + lh; y += lh, row++) {
+        for (let y = lh * 0.92, row = 0; y < H + amp + lh; y += lh, row++) {
           let px = -R() * fs * 5;
           while (px < W) {
             const pick = spec.words[(R() * spec.words.length) | 0], text = pick.t.toUpperCase();
-            const u0 = Math.min(1, Math.max(0, (px + fs * 2) / W)), v0 = (y - fs * 0.35) / H;
+            const yb = base(px + fs * 2, y);
+            const u0 = Math.min(1, Math.max(0, (px + fs * 2) / W)), v0 = (yb - fs * 0.35) / H;
             const wt = 400 + Math.round(3 * toneOf(L(u0, v0))) * 100;         // 400–700, heavier in shadow
             const w = measure(text, wt);
             const u = (px + w / 2) / W;
             // any word touching the silhouette is set; the smoothed outline trims it afterwards
             const inside = M(u, v0) > 0.5 || M(Math.min(1, (px + w) / W), v0) > 0.5 || M(Math.max(0, px / W), v0) > 0.5;
             if (inside) {
-              x.font = font(wt); x.fillText(text, px, y);
-              if (M(u, v0) > 0.5 && (region === 'head') === !!inHead(u, v0))
-                words.push({ x: px, y: y - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)) });
+              const y0 = base(px, y), y1 = base(px + w, y), ang = Math.atan2(y1 - y0, w);
+              x.font = font(wt);
+              x.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * px, dpr * y0);
+              x.fillText(text, 0, 0);
+              x.setTransform(dpr, 0, 0, dpr, 0, 0);
+              if (M(u, v0) > 0.5 && Math.abs(ang) < 0.12 && (region === 'head') === !!inHead(u, v0))
+                words.push({ x: px, y: (y0 + y1) / 2 - fs * 0.74, w, h: fs * 0.8, fs, wt, t: pick.t, m: pick.m, region, tone: toneOf(L(u, v0)), ang });
             }
             px += w + space;
           }
@@ -102,8 +127,8 @@
 
       const tex = canvas(cw, chh), tx = tex.getContext('2d');
       // word size follows the portrait's height so a wide group photo keeps the same type size as a tall one
-      const bodyRows = Math.round(140 * H / BH), headRows = Math.round(200 * H / BH);
-      const body = layer(heads.length ? bodyRows : 150, 'body');
+      const bodyRows = Math.round(152 * H / BH), headRows = Math.round(224 * H / BH);
+      const body = layer(heads.length ? bodyRows : 160, 'body');
       if (heads.length) {
         const fine = layer(headRows, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
         const ell = (ctx, op) => {
@@ -119,10 +144,24 @@
       tx.globalCompositeOperation = 'source-in'; tx.drawImage(this.paint(spec, src), 0, 0, cw, chh);
       // trim to the silhouette with an anti-aliased edge, so letters end along a clean contour
       tx.imageSmoothingQuality = 'high';
-      tx.globalCompositeOperation = 'destination-in'; tx.drawImage(src.mask.img, 0, 0, cw, chh);
+      tx.globalCompositeOperation = 'destination-in'; tx.drawImage(src.alpha, 0, 0, cw, chh);
       tx.globalCompositeOperation = 'source-over';
+      // thin details a row of words can't hold (a golf club): one line of tiny words set along the stroke
+      (spec.strokes || []).forEach(([u0, v0, u1, v1], si) => {
+        const x0 = u0 * W, y0 = v0 * H, x1 = u1 * W, y1 = v1 * H, len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
+        const fs = H / 300, col = hex(spec.ink[1]);
+        tx.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * x0, dpr * y0);
+        tx.font = `600 ${fs}px ${FONT}`; tx.fillStyle = toHex(mix(col, [10, 10, 10], 0.3)); tx.textBaseline = 'middle';
+        let p = 0, k = si;
+        while (p < len) { const t = spec.words[(k++ * 7) % spec.words.length].t.toUpperCase(); tx.fillText(t, p, 0); p += tx.measureText(t).width + fs * 0.3; }
+        tx.setTransform(1, 0, 0, 1, 0, 0);
+      });
 
-      const out = { key: spec.key, tex, words, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
+      // a soft shadow on the paper, so the figure sits slightly above the page
+      const shadow = canvas(cw, chh), sx = shadow.getContext('2d');
+      sx.drawImage(src.shadow, 0, 0, cw, chh); sx.globalCompositeOperation = 'source-in';
+      sx.fillStyle = spec.ink[1]; sx.fillRect(0, 0, cw, chh);
+      const out = { key: spec.key, tex, shadow, words, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;
@@ -135,15 +174,18 @@
       const ramps = inks.map(i => ramp(i[0], i[1]));
       for (let i = 0; i < f.d.length; i++) {
         let t = toneOf(f.d[i]); if (src.ghost) t = 0.05 + t * 0.35;
+        // depth: a soft rim of shade where the figure turns away, so the flat photo reads as a rounded form
+        const dep = src.depth.d[i]; t = Math.min(1, t + 0.2 * Math.pow(1 - dep, 2) - 0.05 * dep);
         // the closing portrait drifts through every facet's ink from top to bottom
-        const y = ((i / f.w) | 0) / f.h, k = Math.min(ramps.length - 1, (y * ramps.length) | 0);
-        const col = ramps[k](t);
+        let col;
+        if (ramps.length === 1) col = ramps[0](t);
+        else {   // continuous blend between neighbouring inks, no bands
+          const y = ((i / f.w) | 0) / f.h * (ramps.length - 1), k = Math.min(ramps.length - 2, y | 0), e = y - k, s = e * e * (3 - 2 * e);
+          col = mix(ramps[k](t), ramps[k + 1](t), s);
+        }
         id.data[i * 4] = col[0]; id.data[i * 4 + 1] = col[1]; id.data[i * 4 + 2] = col[2]; id.data[i * 4 + 3] = 255;
       }
       x.putImageData(id, 0, 0);
-      if (ramps.length > 1) { const b = canvas(f.w, f.h), bx = b.getContext('2d'); bx.filter = 'blur(40px)'; bx.drawImage(c, 0, 0); bx.filter = 'none';
-        // soften the bands between inks but keep detail from the sharp version
-        bx.globalAlpha = 0.6; bx.drawImage(c, 0, 0); this.cache.set(key, b); return b; }
       this.cache.set(key, c); return c;
     }
 

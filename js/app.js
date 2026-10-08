@@ -65,7 +65,7 @@
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
-      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, ink: f.ink, words, seed: 100 + fi }
+      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
       : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: state === 'final' ? FACETS.map(x => x.ink) : null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
@@ -131,6 +131,8 @@
     ctx.save();
     ctx.translate(W / 2, H / 2 + dy); ctx.scale(scale, scale); ctx.translate(-W / 2, -H / 2);
     ctx.translate(L.ox, L.oy);
+    ctx.globalAlpha = alpha * 0.09 * (1 - find);
+    ctx.drawImage(L.shadow, L.W * 0.012, L.H * 0.014, L.W, L.H);
     ctx.globalAlpha = alpha * (1 - 0.78 * find);
     ctx.drawImage(L.tex, 0, 0, L.W, L.H);
     // visitor words sit in the fabric at word size, in the one accent ink

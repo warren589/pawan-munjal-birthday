@@ -7,6 +7,7 @@ window.FACETS = [
     kicker: 'He saw further, and built toward it.',
     lede: 'A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone to grow into it.' },
   { code: 'G', name: 'Sports Enthusiast', short: 'Golfer', img: 'golf', heads: [[0.17, 0.12, 0.2, 0.1]],
+    strokes: [[0.392, 0.858, 0.312, 1.0]],   // the putter shaft, below his hands
     ink: ['#73857a', '#24332b'],
     kicker: 'Patience, precision, and the quiet joy of the game.',
     lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus and a deep respect for fair play.' },
