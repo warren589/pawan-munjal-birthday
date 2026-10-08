@@ -79,18 +79,24 @@
     if (qi < 0) qi = 0; quoted.add(qi); const q = messages[qi];
     chapters.insertAdjacentHTML('beforeend', `
       <section class="sec" data-state="${i}" id="facet-${i}" style="--ink:${f.ink[1]};--ink2:${f.ink[0]}">
-        <div class="note">
-          <p class="eyebrow"><b>${String(i + 1).padStart(2, '0')}</b> / 07</p>
-          <h2>${f.name}</h2>
-          <p class="kicker">${f.kicker}</p>
-          <p class="lede">${f.lede}</p>
-          <blockquote><p>“${esc(q.text)}”</p><cite>${esc(q.name)}<span>${esc(q.rel)}</span></cite></blockquote>
+        <div class="note fnote">
+          <p class="eyebrow"><b>${String(i + 1).padStart(2, '0')}</b> / 07 <span>${f.name}</span></p>
+          <h2 class="fline">${f.line}</h2>
+          <button class="link js-story" type="button" aria-expanded="false">Read his story</button>
+          <div class="story" hidden>${f.story.map(p => `<p>${p}</p>`).join('')}</div>
           ${f.img ? '' : '<p class="pending-photo">Placeholder silhouette · photograph to come</p>'}
         </div>
       </section>`);
     rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${f.ink[1]}"><span>${f.name}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
   });
   rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#161311"><span>The whole person</span><b>∗</b></button>`);
+  chapters.addEventListener('click', e => {
+    const b = e.target.closest('.js-story'); if (!b) return;
+    const st = b.nextElementSibling, open = st.hidden;
+    st.hidden = !open; b.setAttribute('aria-expanded', open); b.textContent = open ? 'Close' : 'Read his story';
+    requestAnimationFrame(() => st.classList.toggle('open', open));
+    placeAnnot();
+  });
   const goTo = id => { const el = id === 'final' ? $('#final') : id === 'hero' ? $('.hero') : $('#facet-' + id); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) goTo(g.dataset.go); });
 
@@ -162,6 +168,31 @@
     return anim;
   }
 
+  // ---------------- annotation: a hairline from the note's sentence to one detail of the photograph ----------------
+  const annot = $('.annot'), apaths = $$('.annot path'), adot = $('.annot circle');
+  let annotFor = null;
+  function placeAnnot(alpha = 1) {
+    const s = view.state, fi = /^\d$/.test(s) ? +s : -1, f = FACETS[fi];
+    const on = f && f.anchor && f.img && !MOBILE.matches && !body.classList.contains('composing') && !body.classList.contains('reading-word');
+    if (!on) { annot.style.opacity = 0; annotFor = null; return; }
+    const sec = $('#facet-' + fi), line = sec.querySelector('.fline');
+    const L = layoutFor(s), r = cv.getBoundingClientRect(), sc = r.width / W, lr = line.getBoundingClientRect();
+    const ax = r.left + (L.ox + f.anchor[0] * L.W) * sc, ay = r.top + (L.oy + f.anchor[1] * L.H) * sc;
+    const bx = lr.left - 18, by = lr.top + Math.min(lr.height, 40) * 0.55;
+    const mx = (ax + bx) / 2;
+    apaths.forEach(p => p.setAttribute('d', `M${bx},${by} C${mx + 40},${by} ${mx - 40},${ay} ${ax + 9},${ay}`));
+    adot.setAttribute('cx', ax); adot.setAttribute('cy', ay);
+    annot.style.opacity = alpha;
+    if (annotFor !== s) {       // a new facet: draw the line in from the sentence to the detail
+      annotFor = s;   // pathLength=1, so the draw-in survives the note moving (e.g. when its story opens)
+      apaths.forEach(p => { p.style.transition = 'none'; p.style.strokeDasharray = 1; p.style.strokeDashoffset = 1; }); adot.classList.remove('on');
+      annot.getBoundingClientRect();
+      apaths.forEach(p => { p.style.transition = 'stroke-dashoffset 1.1s cubic-bezier(.6,0,.2,1) .15s'; p.style.strokeDashoffset = 0; });
+      setTimeout(() => { if (annotFor === s) adot.classList.add('on'); }, 1050);
+    }
+  }
+  addEventListener('resize', () => placeAnnot());
+
   let raf = 0, current = null;
   function frameDraw() {
     raf = 0; if (!ready) return;
@@ -173,6 +204,8 @@
     anim = drawPortrait(b.a, 1 - b.e, -16 * b.e, 1 - 0.02 * b.e, now) || anim;
     if (b.b !== b.a) anim = drawPortrait(b.b, b.e, 16 * (1 - b.e), 1.02 - 0.02 * b.e, now) || anim;
     syncState(view.state);
+    // the line is only there while a facet is settled; it fades through the crossfade
+    placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
     if (anim) kick();
   }
   const kick = () => { if (!raf) raf = requestAnimationFrame(frameDraw); };
@@ -185,6 +218,7 @@
     rail.style.setProperty('--p', Math.max(0, ai) / 7);
     body.dataset.state = s;
     $$('.flow .sec').forEach(sec => sec.classList.toggle('is-on', sec.dataset.state === s));
+    $$('.story:not([hidden])').forEach(st => { if (st.closest('.sec').dataset.state !== s) { st.hidden = true; st.classList.remove('open'); const b = st.previousElementSibling; b.textContent = 'Read his story'; b.setAttribute('aria-expanded', 'false'); } });
   }
 
   // warm every portrait in idle time so scrolling never waits on layout
@@ -230,7 +264,7 @@
   const reader = $('.reader'), lead = $('.lead');
   function closeReader() {
     if (!body.classList.contains('reading-word')) return;
-    body.classList.remove('reading-word'); picked = null; lead.classList.remove('on'); kick();
+    body.classList.remove('reading-word'); picked = null; lead.classList.remove('on'); annotFor = null; kick();
   }
   function placeLead() {
     if (!picked || !body.classList.contains('reading-word')) return;
@@ -294,12 +328,12 @@
   }
   function openComposer() {
     closeReader(); closeToast();
-    composer.classList.remove('sending', 'emptied'); clearTimeout(composer._t); composer.hidden = false; body.classList.add('composing');
+    composer.classList.remove('sending', 'emptied'); clearTimeout(composer._t); composer.hidden = false; body.classList.add('composing'); kick();
     requestAnimationFrame(() => composer.classList.add('open'));
     setTimeout(() => ta.focus({ preventScroll: true }), 420);
   }
   function closeComposer() {
-    composer.classList.remove('open'); body.classList.remove('composing');
+    composer.classList.remove('open'); body.classList.remove('composing'); annotFor = null; kick();
     clearTimeout(composer._t); composer._t = setTimeout(() => { composer.hidden = true; }, 500);
   }
   $$('.js-write').forEach(b => b.addEventListener('click', openComposer));

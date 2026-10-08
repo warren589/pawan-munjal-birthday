@@ -4,33 +4,40 @@
 window.FACETS = [
   { code: 'L', name: 'Visionary Leader', short: 'Leader', img: 'leader', heads: [[0.45, 0.17, 0.2, 0.15]],
     ink: ['#6c6f8f', '#1f2340'],
-    kicker: 'He saw further, and built toward it.',
-    lede: 'A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone to grow into it.' },
+    line: "He saw the road ahead long before anyone else, and built it.",
+    anchor: [0.84, 0.52],   // the detail the note's line points to
+    story: ["A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone around him to grow into it.", "Colleagues speak less of the strategy than of the clarity: a sense that the destination was always visible to him, and that he wanted everyone to see it too."] },
   { code: 'G', name: 'Sports Enthusiast', short: 'Golfer', img: 'golf', heads: [[0.17, 0.12, 0.2, 0.1]],
     strokes: [[0.393, 0.85, 0.308, 1.0]],   // the putter shaft, below his hands
     ink: ['#73857a', '#24332b'],
-    kicker: 'Patience, precision, and the quiet joy of the game.',
-    lede: 'On the course the same qualities show up: a steady swing, a competitor’s focus and a deep respect for fair play.' },
+    line: "On the course, as in life: patience first, then precision.",
+    anchor: [0.42, 0.79],   // the detail the note's line points to
+    story: ["The same qualities show up on the green as in the boardroom: a steady swing, a competitor\u2019s focus and a deep respect for fair play.", "Partners remember the calm before a difficult putt, and the generosity after it, win or lose."] },
   { code: 'F', name: 'Family Man', short: 'Family', img: 'family', headScale: 1.3, heads: [[0.147, 0.192, 0.052, 0.098], [0.258, 0.213, 0.048, 0.092], [0.408, 0.116, 0.06, 0.124], [0.58, 0.208, 0.052, 0.098], [0.712, 0.271, 0.048, 0.092], [0.825, 0.199, 0.052, 0.098]],
     ink: ['#a0705b', '#3b2219'],
-    kicker: 'Behind every title, a home full of warmth.',
-    lede: 'A father and grandfather first. The values he carries into every boardroom were shaped, and are still kept, at home.' },
+    line: "Before every title, he is a father, a husband and a grandfather.",
+    anchor: [0.84, 0.32],   // the detail the note's line points to
+    story: ["The values he carries into every boardroom were shaped at home, and are still kept there.", "Family members describe a man who listens first, laughs easily and is never too busy to be present."] },
   { code: 'M', name: 'Mentor', short: 'Mentor', img: null, heads: null,
     ink: ['#9c8355', '#3a2e17'],
-    kicker: 'He believed in people before they believed in themselves.',
-    lede: 'Generations of leaders remember a conversation, a nudge, a door held open.' },
+    line: "He believed in people before they believed in themselves.",
+    anchor: null,   // the detail the note's line points to
+    story: ["Generations of leaders remember a conversation, a nudge, a door held open at exactly the right moment.", "His greatest work may be the people he shaped, many of whom now lead in their own right."] },
   { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', headScale: 1.15, heads: [[0.27, 0.2, 0.1, 0.16], [0.69, 0.22, 0.095, 0.16]],
     ink: ['#6a8589', '#1d3035'],
-    kicker: 'An Indian story, told to the world.',
-    lede: 'Built on relationships and mutual respect, his reach extends across markets and cultures, always with India at its heart.' },
+    line: "An Indian story, told to the world, one handshake at a time.",
+    anchor: [0.53, 0.6],   // the detail the note's line points to
+    story: ["Built on relationships and mutual respect, his reach extends across markets and cultures, always with India at its heart.", "Partners abroad speak of trust earned slowly and kept for decades."] },
   { code: 'H', name: 'Humanitarian', short: 'Humanitarian', img: 'humanitarian', heads: [[0.6, 0.17, 0.13, 0.11]],
     ink: ['#93687a', '#3a1f2b'],
-    kicker: 'Progress means little unless it lifts others.',
-    lede: 'Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.' },
+    line: "Progress means little unless it lifts someone else.",
+    anchor: [0.72, 0.68],   // the detail the note's line points to
+    story: ["Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.", "Much of it happens far from cameras, in villages, classrooms and communities that rarely make the news."] },
   { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', heads: [[0.32, 0.14, 0.14, 0.15]],
     ink: ['#8f7a66', '#33261c'],
-    kicker: 'Decades of roads travelled, and still moving.',
-    lede: 'Milestones, memories and millions of miles, measured in everyone who came along for the ride.' }
+    line: "Millions of miles travelled, and he is still riding.",
+    anchor: [0.38, 0.56],   // the detail the note's line points to
+    story: ["Milestones, memories and miles, measured not only in what was built but in everyone who came along for the ride.", "The journey is far from over, and the road ahead is still the one he looks at most."] }
 ];
 
 // The opening and closing portrait: the studio photograph, warm grey ink
