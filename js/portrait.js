@@ -52,8 +52,8 @@
       // decode every photograph in parallel; the heavier per-pixel preparation happens on first use
       this.raw = {};
       await Promise.all(Object.entries(portraits).map(async ([k, v]) => {
-        const [lum, mask] = await Promise.all([load(v.lum), load(v.mask)]);
-        this.raw[k] = { lum, mask, aspect: lum.width / lum.height };
+        const [lum, mask, scene] = await Promise.all([load(v.lum), load(v.mask), v.scene ? load(v.scene.src) : null]);
+        this.raw[k] = { lum, mask, aspect: lum.width / lum.height, scene, sceneBox: v.scene };
       }));
     }
 
@@ -70,7 +70,7 @@
         return (this.src.ghost = { ...s, lum: field(gl), ghost: true });
       }
       const r = this.raw[k], m = field(r.mask, 0);
-      return (this.src[k] = { lum: field(r.lum), mask: m, depth: field(r.mask, 1), alpha: alphaOf(m), shadow: alphaOf(m, Math.round(m.w / 70)), aspect: r.aspect });
+      return (this.src[k] = { scene: r.scene ? field(r.scene) : null, sceneBox: r.sceneBox, lum: field(r.lum), mask: m, depth: field(r.mask, 1), alpha: alphaOf(m), shadow: alphaOf(m, Math.round(m.w / 70)), aspect: r.aspect });
     }
 
     aspect(spec) { return this.raw[spec.img || 'studio'].aspect; }
@@ -168,14 +168,59 @@
         tx.setTransform(1, 0, 0, 1, 0, 0);
       });
 
+      const scene = src.scene && !src.ghost ? this.sceneLayer(spec, src, W, H, BW, BH, dpr, R) : null;
       // a soft shadow on the paper, so the figure sits slightly above the page
       const shadow = canvas(cw, chh), sx = shadow.getContext('2d');
       sx.drawImage(src.shadow, 0, 0, cw, chh); sx.globalCompositeOperation = 'source-in';
       sx.fillStyle = spec.ink[1]; sx.fillRect(0, 0, cw, chh);
-      const out = { key: spec.key, tex, shadow, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
+      const out = { key: spec.key, tex, shadow, scene, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
       return out;
+    }
+
+    // The photograph's surroundings, also set in words: smaller, lighter and faded, so the subject stays in focus.
+    // Covers the whole stage box; positioned relative to the subject the same way the original photo was.
+    sceneLayer(spec, src, W, H, BW, BH, dpr, R) {
+      const ox = Math.round((BW - W) / 2), oy = BH - H, b = src.sceneBox, S = sample(src.scene);
+      const sx = ox + b.x * W, sy = oy + b.y * H, sw = b.w * W, sh = b.h * H;
+      const cw = Math.round(BW * dpr), ch = Math.round(BH * dpr);
+      const c = canvas(cw, ch), x = c.getContext('2d');
+      x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
+      const lh = Math.max(4, BH / 150), fs = lh * 1.15, space = fs * 0.3;
+      const x0 = Math.max(0, sx), x1 = Math.min(BW, sx + sw), y0 = Math.max(0, sy), y1 = Math.min(BH, sy + sh);
+      const widths = new Map();
+      for (let y = y0 + lh; y < y1 + lh; y += lh) {
+        let px = x0 - R() * fs * 5;
+        while (px < x1) {
+          const t = spec.words[(R() * spec.words.length) | 0].t.toUpperCase();
+          const tone = toneOf(S((px + fs * 2 - sx) / sw, (y - sy) / sh));
+          const wt = tone > 0.55 ? 600 : 400, k = wt + t;
+          let w = widths.get(k); if (w === undefined) { x.font = `${wt} ${fs}px ${FONT}`; w = x.measureText(t).width; widths.set(k, w); }
+          x.font = `${wt} ${fs}px ${FONT}`; x.fillText(t, px, y);
+          px += w + space;
+        }
+      }
+      x.setTransform(1, 0, 0, 1, 0, 0);
+      // colour from the scene photo in the facet's ink
+      const pc = canvas(src.scene.w, src.scene.h), pcx = pc.getContext('2d'), id = pcx.createImageData(pc.width, pc.height), rmp = ramp(spec.ink[0], spec.ink[1]);
+      for (let i = 0; i < src.scene.d.length; i++) {
+        const col = rmp(toneOf(src.scene.d[i]));
+        id.data[i * 4] = col[0]; id.data[i * 4 + 1] = col[1]; id.data[i * 4 + 2] = col[2]; id.data[i * 4 + 3] = 255;
+      }
+      pcx.putImageData(id, 0, 0);
+      x.globalCompositeOperation = 'source-in'; x.drawImage(pc, sx * dpr, sy * dpr, sw * dpr, sh * dpr);
+      // keep it faint
+      x.globalCompositeOperation = 'destination-in'; x.fillStyle = 'rgba(0,0,0,0.42)'; x.fillRect(0, 0, cw, ch);
+      // clear a soft margin around the subject so the two never blur together
+      x.globalCompositeOperation = 'destination-out';
+      x.filter = `blur(${Math.round(10 * dpr)}px)`; x.drawImage(src.alpha, ox * dpr, oy * dpr, W * dpr, H * dpr); x.drawImage(src.alpha, ox * dpr, oy * dpr, W * dpr, H * dpr); x.filter = 'none';
+      // and dissolve towards the edges of the scene and of the stage
+      const fade = (gx0, gy0, gx1, gy1) => { const g = x.createLinearGradient(gx0, gy0, gx1, gy1); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, cw, ch); };
+      const L0 = x0 * dpr, R0 = x1 * dpr, T0 = y0 * dpr, B0 = y1 * dpr, mX = (R0 - L0) * 0.22, mY = (B0 - T0) * 0.22;
+      fade(L0, 0, L0 + mX, 0); fade(R0, 0, R0 - mX, 0); fade(0, T0, 0, T0 + mY); fade(0, B0, 0, B0 - mY * 0.25);
+      x.globalCompositeOperation = 'source-over';
+      return c;
     }
 
     paint(spec, src) {
