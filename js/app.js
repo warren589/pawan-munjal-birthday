@@ -494,7 +494,7 @@
 
   // ---------------- letters: every message in one continuous column ----------------
   const lettersBody = $('.letters__body'), filters = $('.letters .filters'), search = $('.letters .search input');
-  let lf = 'all', lq = '', shown = 10;
+  let lq = '';
   function marked(m) {
     const ex = extract(m.text), spans = [];
     ex.found.forEach((f, w) => { if (m.words.includes(w)) f.spans.forEach(sp => spans.push([...sp, w])); });
@@ -506,24 +506,57 @@
     });
     return out + esc(m.text.slice(at));
   }
+  // Long letters, found before they are read: each row leads with the letter's most telling sentence (the one with the
+  // most portrait words, since openings are often generic), signed with name, relationship, facet marks and reading time.
+  // Every eighth row is set as a larger pull quote, so the list reads like a page rather than an inbox.
+  const GROUPS = window.LETTER_GROUPS, COUNTS = window.LETTER_COUNTS;
+  const letters = window.LETTERS.map(l => {
+    const text = l.paras.join(' '), ex = extract(text);
+    const sentences = l.paras.flatMap(p => p.replace(/\b(Mr|Mrs|Ms|Dr|St)\./g, '$1\u2024').match(/[^.!?]+[.!?]+[”"’]?/g) || [p]).map(t => t.trim().replace(/\u2024/g, '.'));   // titles like “Mr.” don't end a sentence
+    const score = t => extract(t).words.length * 10 - Math.max(0, t.length - 150) * 0.4 - (/^(dear|respected|papa|pawan)\b/i.test(t) ? 25 : 0) - (/\b(birthday|wishing|wishes|happy)\b/i.test(t) ? 40 : 0) - (t.length < 40 ? 30 : 0);
+    const lead = sentences.slice().sort((x, y) => score(y) - score(x))[0];
+    const words = text.split(/\s+/).length;
+    return { ...l, text, lead, facets: [...new Set(ex.words.flatMap(w => facetsOf(w, ex.fallback)))].slice(0, 3), mins: Math.max(1, Math.round(words / 200)) };
+  });
+  let lg = 'all', lshown = 12;
+  const dots = codes => codes.map(c => `<i style="--c:${FACETS[CODES.indexOf(c)].ink[0]}" title="${FACETS[CODES.indexOf(c)].name}"></i>`).join('');
+  function letterHTML(l, i, featured) {
+    const full = l.paras ? l.paras.map(p => `<p>${marked({ text: p, words: extract(p).words })}</p>`).join('') : `<p>${marked(l)}</p>`;
+    return `<article class="lrow${featured ? ' feat' : ''}${l.mine ? ' mine' : ''}" data-i="${i}">
+      <button class="lrow__q" type="button" aria-expanded="false"><span class="lrow__lead">“${esc(l.lead)}”</span></button>
+      <div class="lrow__full" hidden><p class="lrow__to">Dear Dr. Munjal,</p>${full}</div>
+      <footer class="lrow__sig"><b>${esc(l.name || 'Anonymous')}</b><span>${esc(l.rel || '')}</span>
+        ${l.mine ? '<em>Your letter · pending approval</em>' : ''}<span class="lrow__meta"><span class="lrow__dots">${dots(l.facets)}</span>${l.mins} min read</span>
+        <span class="lrow__go">Read the letter →</span></footer>
+    </article>`;
+  }
   function renderLetters() {
     const q = lq.toLowerCase();
-    const rank = m => m.mine ? 0 : 1;
-    const list = messages.map((m, i) => ({ m, i })).reverse().sort((a, b) => rank(a.m) - rank(b.m)).filter(({ m }) =>
-      (lf === 'all' || m.facets.has(lf)) && (!q || (m.text + ' ' + (m.name || '') + ' ' + (m.rel || '')).toLowerCase().includes(q)));
-    lettersBody.innerHTML = list.slice(0, shown).map(({ m }) => `
-      <article class="letter${m.mine ? ' mine' : ''}">
-        <p>“${marked(m)}”</p>
-        <footer><b>${esc(m.name || 'Anonymous')}</b>${m.rel ? ` · ${esc(m.rel)}` : ''}${m.mine ? ' <em>Pending approval · visible only to you</em>' : ''}</footer>
-      </article>`).join('');
+    // your own message comes first, then the letters
+    const mine = messages.filter(m => m.mine).reverse().map(m => ({ name: m.name, rel: m.rel, cat: 'mine', mine: true, text: m.text, words: m.words, lead: m.text, facets: [...m.facets].slice(0, 3), mins: 1 }));
+    const all = [...mine, ...letters];
+    const list = all.filter(l => (lg === 'all' || l.cat === lg || l.mine) && (!q || (l.text + ' ' + (l.name || '') + ' ' + (l.rel || '')).toLowerCase().includes(q)));
+    let n = 0;
+    lettersBody.innerHTML = list.slice(0, lshown).map((l, k) => { const feat = !l.mine && (++n % 8 === 0); return letterHTML(l, all.indexOf(l), feat); }).join('');
+    lettersBody._list = all;
     $('.letters__empty').hidden = list.length > 0;
-    $('.js-more').hidden = list.length <= shown;
-    filters.innerHTML = [['all', 'All'], ...FACETS.map(f => [f.code, f.short])].map(([c, l]) =>
-      `<button type="button" data-f="${c}" aria-pressed="${lf === c}">${l}</button>`).join('');
+    $('.js-more').hidden = list.length <= lshown;
+    const total = Object.values(COUNTS).reduce((a, b) => a + b, 0);
+    filters.innerHTML = [['all', 'All', total], ...GROUPS.map(([c, l]) => [c, l, COUNTS[c]])].map(([c, l, k]) =>
+      `<button type="button" data-f="${c}" aria-pressed="${lg === c}">${l} <span>${k.toLocaleString('en-IN')}</span></button>`).join('');
   }
-  filters.addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { lf = b.dataset.f; shown = 10; renderLetters(); } });
-  search.addEventListener('input', () => { lq = search.value.trim(); shown = 10; renderLetters(); });
-  $('.js-more').addEventListener('click', () => { shown += 10; renderLetters(); });
+  // a row opens in place (the pinned close bar and links from the voices come next)
+  lettersBody.addEventListener('click', e => {
+    const b = e.target.closest('.lrow__q, .lrow__go'); if (!b) return;
+    const lrow = b.closest('.lrow'), full = lrow.querySelector('.lrow__full'), open = full.hidden;
+    full.hidden = !open; lrow.classList.toggle('open', open); lrow.querySelector('.lrow__q').setAttribute('aria-expanded', open);
+    lrow.querySelector('.lrow__go').textContent = open ? 'Close' : 'Read the letter →';
+  });
+  filters.addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { lg = b.dataset.f; lshown = 12; renderLetters(); } });
+  search.addEventListener('input', () => { lq = search.value.trim(); lshown = 12; renderLetters(); });
+  $('.js-more').addEventListener('click', () => { lshown += 12; renderLetters(); });
+  // more letters arrive as you reach the end of the list
+  new IntersectionObserver(es => { if (es[0].isIntersecting && !$('.js-more').hidden) { lshown += 12; renderLetters(); } }, { rootMargin: '400px' }).observe($('.js-more'));
   renderLetters();
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
