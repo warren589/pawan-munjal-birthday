@@ -51,17 +51,43 @@
           <button class="btn js-write" type="button">Add your words</button>
           <button class="link js-find" type="button" hidden>Find my words</button>
         </div>
-        <a class="link" href="#letters">Read the messages ↓</a>
+        <a class="link" href="#messages">Read the messages ↓</a>
       </div>
     </section>
   </div>
 </main>
 
+<section class="board" id="messages" aria-labelledby="board-title">
+  <div class="board__stage">
+    <canvas class="field" aria-hidden="true"></canvas>
+    <svg class="board__lead" aria-hidden="true"><path d=""/><circle r="3"/></svg>
+    <div class="board__intro">
+      <p class="eyebrow">The messages</p>
+      <h2 id="board-title"><span class="js-count">2,418</span> voices</h2>
+      <p class="lede">Every message, all at once. Scroll on to read them one at a time, or tap anywhere to look closer.</p>
+    </div>
+    <p class="board__hint">Tap a message to read it <button class="link js-zoomout" type="button">Show all</button></p>
+    <article class="feature" aria-live="polite">
+      <div class="feature__body"></div>
+      <div class="board__bar">
+        <span class="board__n"></span>
+        <span class="board__nav"><button class="js-prev" type="button" aria-label="Previous message">←</button><button class="js-next" type="button" aria-label="Next message">→</button></span>
+        <button class="link js-play" type="button">Play</button>
+        <button class="link js-bsearch" type="button" aria-expanded="false">Search</button>
+      </div>
+      <div class="board__search" hidden>
+        <label class="search"><span class="sr">Search messages</span><input type="search" placeholder="A word or a name"></label>
+        <div class="filters" role="group" aria-label="Filter by facet"></div>
+      </div>
+    </article>
+  </div>
+</section>
+
 <section class="letters" id="letters" aria-labelledby="letters-title">
   <div class="letters__head">
-    <p class="eyebrow">The messages</p>
+    <p class="eyebrow">Every message</p>
     <h2 id="letters-title">In their own words</h2>
-    <p class="lede">Every message, in full. The words you see in the portrait are underlined.</p>
+    <p class="lede">The full list, to read at your own pace. The words you see in the portrait are underlined.</p>
     <div class="letters__tools">
       <div class="filters" role="group" aria-label="Filter by facet"></div>
       <label class="search"><span class="sr">Search messages</span><input type="search" placeholder="Search words or names"></label>

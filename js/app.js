@@ -43,7 +43,7 @@
   const facetsOf = (w, fb) => (fb && fb.has(w)) ? ['J'] : [...(VOCAB.get(w)?.facets || ['J'])];
 
   // ---------------- messages ----------------
-  const messages = window.SAMPLE_MESSAGES.map(s => {
+  const messages = [...window.SAMPLE_MESSAGES, ...(window.CROWD_MESSAGES || [])].map(s => {
     const ex = extract(s.text);
     return { ...s, words: ex.words, facets: new Set(ex.words.flatMap(w => facetsOf(w, ex.fallback))) };
   });
@@ -61,7 +61,7 @@
     if (specs[state]) return specs[state];
     const fi = /^\d$/.test(state) ? +state : -1, f = FACETS[fi], code = f ? f.code : null, R = seeded(31 + STATES.indexOf(state) * 17);
     const words = [];
-    messages.forEach((m, i) => { if (!code || m.facets.has(code)) m.words.forEach(w => { for (let k = 0; k < 3; k++) words.push({ t: w, m: i }); }); });
+    messages.forEach((m, i) => { if (!m.crowd && (!code || m.facets.has(code))) m.words.forEach(w => { for (let k = 0; k < 3; k++) words.push({ t: w, m: i }); }); });
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
@@ -480,7 +480,7 @@
     const t = $('.toast'); t.hidden = false; requestAnimationFrame(() => t.classList.add('open'));
     clearTimeout(t._t); t._t = setTimeout(closeToast, 9000);
     $$('.js-find').forEach(b => { b.hidden = false; });
-    renderLetters();
+    renderLetters(); board.added();
   }
   function closeToast() { const t = $('.toast'); t.classList.remove('open'); clearTimeout(t._t); t._t = setTimeout(() => { t.hidden = true; }, 400); }
   $('.js-close-toast').addEventListener('click', closeToast);
@@ -493,7 +493,7 @@
   $$('.js-find').forEach(b => b.addEventListener('click', () => toggleFind()));
 
   // ---------------- letters: every message in one continuous column ----------------
-  const lettersBody = $('.letters__body'), filters = $('.filters'), search = $('.search input');
+  const lettersBody = $('.letters__body'), filters = $('.letters .filters'), search = $('.letters .search input');
   let lf = 'all', lq = '', shown = 10;
   function marked(m) {
     const ex = extract(m.text), spans = [];
@@ -508,7 +508,8 @@
   }
   function renderLetters() {
     const q = lq.toLowerCase();
-    const list = messages.map((m, i) => ({ m, i })).reverse().filter(({ m }) =>
+    const rank = m => m.mine ? 0 : m.crowd ? 2 : 1;
+    const list = messages.map((m, i) => ({ m, i })).reverse().sort((a, b) => rank(a.m) - rank(b.m)).filter(({ m }) =>
       (lf === 'all' || m.facets.has(lf)) && (!q || (m.text + ' ' + (m.name || '') + ' ' + (m.rel || '')).toLowerCase().includes(q)));
     lettersBody.innerHTML = list.slice(0, shown).map(({ m }) => `
       <article class="letter${m.mine ? ' mine' : ''}">
@@ -525,6 +526,249 @@
   $('.js-more').addEventListener('click', () => { shown += 10; renderLetters(); });
   renderLetters();
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
+
+  // ---------------- message board: the whole crowd as one quiet sheet, one voice brought forward ----------------
+  const board = (() => {
+    const sec = $('.board'), stage = $('.board__stage'), fc = $('.field'), fx = fc.getContext('2d');
+    const card = $('.feature'), fbody = $('.feature__body'), nEl = $('.board__n'), lead = $('.board__lead'), lpath = $('.board__lead path'), ldot = $('.board__lead circle');
+    const sPanel = $('.board__search'), sInput = sPanel.querySelector('input'), sFilters = sPanel.querySelector('.filters'), playBtn = $('.js-play'), sBtn = $('.js-bsearch');
+    const INK = '#1d1a17';
+    let SW = 0, SH = 0, D = 1, L = null, base = null, building = null;
+    let view = { s: 1, x: 0, y: 0 }, raf = 0;
+    let mode = 'field', auto = false, cur = -1, pos = 0, hover = null, q = '', qf = 'all', matches = null, list = [], timer = null, inView = false, paused = false;
+    let shuffled = null;
+    // the sheet's order: your own message first, then everyone else in a fixed shuffle (so early messages don't crowd the top)
+    function fieldOrder() {
+      if (!shuffled) { const R = seeded(77); shuffled = messages.map((m, i) => i).filter(i => !messages[i].mine); for (let i = shuffled.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; } }
+      const mine = messages.map((m, i) => i).filter(i => messages[i].mine).reverse();
+      return [...mine, ...shuffled];
+    }
+    // reading order: yours, then the hand-picked messages, then the rest as they sit on the sheet
+    function readOrder() {
+      const f = fieldOrder(), rank = i => messages[i].mine ? 0 : messages[i].crowd ? 2 : 1;
+      return f.map((i, k) => [i, k]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(a => a[0]);
+    }
+
+    function layout() {
+      const r = stage.getBoundingClientRect(); SW = r.width; SH = r.height; D = Math.min(2, devicePixelRatio || 1);
+      fc.width = Math.round(SW * D); fc.height = Math.round(SH * D);
+      const mob = MOBILE.matches, fs = mob ? 6.2 : 7.4, lh = fs * 1.42, pad = mob ? 14 : 28;
+      const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) + 6, bottom = SH - 12;
+      const gap = mob ? 12 : 22, want = mob ? 150 : 236, cols = Math.max(2, Math.round((SW - pad * 2 + gap) / (want + gap))), cw = (SW - pad * 2 - gap * (cols - 1)) / cols;
+      const F = `400 ${fs}px Newsreader`, FN = `500 ${(fs * 0.8).toFixed(2)}px Archivo`;
+      const wc = new Map(), mw = (t, f) => { const k = f + '|' + t; let v = wc.get(k); if (v === undefined) { fx.font = f; v = fx.measureText(t).width; wc.set(k, v); } return v; };
+      const items = []; let col = 0, y = top + lh;
+      for (const i of fieldOrder()) {
+        const m = messages[i], ex = extract(m.text), inks = [];
+        ex.found.forEach((f, w) => { if (m.words.includes(w)) f.spans.forEach(([a, b]) => inks.push([a, b, FACETS[CODES.indexOf(facetsOf(w)[0])].ink[0]])); });
+        const toks = [], re = /\S+/g; let mm;
+        while ((mm = re.exec(m.text))) { const a = mm.index, b = a + mm[0].length, k = inks.find(sp => sp[0] < b && sp[1] > a); toks.push({ t: mm[0], f: F, ink: k ? k[2] : null }); }
+        ('— ' + (m.name || 'Anonymous').toUpperCase()).split(' ').forEach((t, k) => toks.push({ t, f: FN, name: true, sep: k === 0 }));
+        // wrap into lines of the column width
+        const lines = []; let ln = { dy: 0, toks: [], w: 0 };
+        for (const tk of toks) {
+          const w = mw(tk.t, tk.f), sp = mw(' ', tk.f) * (tk.name ? 1.4 : 1);
+          if (ln.toks.length && ln.w + sp + w > cw) { lines.push(ln); ln = { dy: lines.length * lh, toks: [], w: 0 }; }
+          tk.dx = ln.toks.length ? ln.w + sp : 0; ln.w = tk.dx + w; ln.toks.push(tk);
+        }
+        lines.push(ln);
+        const h = (lines.length - 1) * lh;
+        if (y + h > bottom) { col++; y = top + lh; if (col >= cols) break; }
+        items.push({ i, x: pad + col * (cw + gap), y, h, lines, lh, fs });
+        y += h + lh * 1.75;
+      }
+      L = { items, cw, lh, fs, byI: new Map(items.map(it => [it.i, it])) };
+      renderBase();
+    }
+    function drawItem(ctx, it, a, accent) {
+      for (const ln of it.lines) for (const tk of ln.toks) {
+        ctx.font = tk.f; ctx.fillStyle = accent || tk.ink || INK;
+        ctx.globalAlpha = a * (accent ? 1 : tk.ink ? 0.7 : tk.name ? 0.62 : 0.48);
+        ctx.fillText(tk.t, it.x + tk.dx, it.y + ln.dy);
+      }
+    }
+    const visible = (it, s, ox, oy) => !(it.x * s + ox > SW || (it.x + L.cw) * s + ox < 0 || (it.y - it.lh) * s + oy > SH || (it.y + it.h + it.lh) * s + oy < 0);
+    function drawAll(ctx, s, ox, oy, cull) {
+      ctx.setTransform(D * s, 0, 0, D * s, D * ox, D * oy); ctx.textBaseline = 'alphabetic';
+      for (const it of L.items) if (!cull || visible(it, s, ox, oy)) drawItem(ctx, it, matches && !matches.has(it.i) ? 0.14 : 1);
+      ctx.globalAlpha = 1;
+    }
+    function renderBase() {
+      base = base || document.createElement('canvas'); base.width = fc.width; base.height = fc.height;
+      const b = base.getContext('2d'); b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, base.width, base.height); drawAll(b, 1, 0, 0, false);
+      paint(true);
+    }
+    // a message lifted out of the sheet: a soft band behind its lines, its words at full strength
+    function mark(it, s, ox, oy, accent) {
+      fx.setTransform(D * s, 0, 0, D * s, D * ox, D * oy);
+      fx.globalAlpha = accent ? 0.13 : 0.07; fx.fillStyle = accent ? ACCENT : INK;
+      for (const ln of it.lines) fx.fillRect(it.x - 3, it.y + ln.dy - it.fs * 0.95, ln.w + 6, it.lh);
+      drawItem(fx, it, 1, accent ? ACCENT : null); fx.globalAlpha = 1;
+    }
+    function paint(crisp) {
+      if (!L) return;
+      const { s, x, y } = view;
+      fx.setTransform(1, 0, 0, 1, 0, 0); fx.clearRect(0, 0, fc.width, fc.height);
+      if (s === 1) fx.drawImage(base, Math.round(x * D), Math.round(y * D));
+      else if (!crisp) { fx.setTransform(s, 0, 0, s, x * D, y * D); fx.drawImage(base, 0, 0); }
+      else drawAll(fx, s, x, y, true);
+      const h = hover != null && L.byI.get(hover); if (h && hover !== cur) mark(h, s, x, y, false);
+      const c = mode === 'feature' && L.byI.get(cur); if (c) mark(c, s, x, y, true);
+      placeLead();
+    }
+    const clampView = v => {
+      const mob = MOBILE.matches && mode === 'feature';
+      return { s: v.s, x: Math.min(0, Math.max(SW - SW * v.s, v.x)), y: mob ? Math.min(0, Math.max(-SH * 0.5, v.y)) : Math.min(0, Math.max(SH - SH * v.s, v.y)) };
+    };
+    function go(target, dur = 750, after) {
+      cancelAnimationFrame(raf);
+      const from = { ...view }, to = clampView(target), t0 = performance.now(), d = REDUCED.matches ? 1 : dur;
+      const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const step = now => {
+        const k = Math.min(1, (now - t0) / d), e = ease(k);
+        view = { s: from.s + (to.s - from.s) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+        if (k < 1) { paint(false); raf = requestAnimationFrame(step); } else { view = to; paint(true); after && after(); }
+      };
+      raf = requestAnimationFrame(step);
+    }
+    function setMode(m) { mode = m; sec.classList.toggle('featuring', m === 'feature'); sec.classList.toggle('zoomed', m === 'zoom'); }
+
+    // ---- the message brought forward ----
+    function placeLead() {
+      const it = mode === 'feature' && L && L.byI.get(cur);
+      if (!it || MOBILE.matches) { lead.classList.remove('on'); return; }
+      const sr = stage.getBoundingClientRect(), cr = card.getBoundingClientRect();
+      const { s, x, y } = view, ln = it.lines[0];
+      const tx = (it.x + Math.min(ln.w, L.cw) / 2) * s + x, ty = (it.y - it.fs * 0.35) * s + y;
+      const l = cr.left - sr.left - 18, r = cr.right - sr.left + 18, t = cr.top - sr.top - 18, b = cr.bottom - sr.top + 18;
+      if (tx > l && tx < r && ty > t && ty < b) { lead.classList.remove('on'); return; }   // it sits behind the card
+      let ax, ay;
+      if (tx < l) { ax = l; ay = Math.max(t + 30, Math.min(b - 30, ty)); } else if (tx > r) { ax = r; ay = Math.max(t + 30, Math.min(b - 30, ty)); }
+      else { ax = Math.max(l + 40, Math.min(r - 40, tx)); ay = ty < t ? t : b; }
+      const horiz = tx < l || tx > r;
+      const c1 = horiz ? [ax + (tx - ax) * 0.55, ay] : [ax, ay + (ty - ay) * 0.55], c2 = horiz ? [tx, ay + (ty - ay) * 0.2] : [ax + (tx - ax) * 0.2, ty];
+      lpath.setAttribute('d', `M${ax},${ay}C${c1} ${c2} ${tx},${ty}`); ldot.setAttribute('cx', tx); ldot.setAttribute('cy', ty);
+      lead.classList.add('on');
+    }
+    function fill(i) {
+      const m = messages[i];
+      fbody.innerHTML = `<blockquote>“${marked(m)}”</blockquote><cite>${esc(m.name || 'Anonymous')}<span>${esc(m.rel || '')}${m.mine ? '<em>Pending approval · visible only to you</em>' : ''}</span></cite>`;
+      nEl.textContent = matches ? `${pos + 1} of ${list.length} ${list.length === 1 ? 'match' : 'matches'}` : '';
+    }
+    function feature(i, byScroll) {
+      if (!byScroll) auto = false;
+      const was = mode === 'feature', k = list.indexOf(i); if (k >= 0) pos = k;
+      cur = i; hover = null;
+      const show = () => { fill(i); fbody.classList.remove('out'); };
+      if (was) { fbody.classList.add('out'); setTimeout(show, REDUCED.matches ? 0 : 260); } else show();
+      setMode('feature');
+      // on a phone the panel covers the lower part of the screen, so the sheet slides to keep this message in view above it
+      const it = L.byI.get(i), oy = MOBILE.matches && it ? Math.min(0, SH * 0.2 - it.y) : 0;
+      go({ s: 1, x: 0, y: oy }, 700);
+    }
+    function step(d) { if (!list.length) return; pos = (pos + d + list.length) % list.length; feature(list[pos]); }
+    function toField() { setMode('field'); cur = -1; go({ s: 1, x: 0, y: 0 }, 600); }
+    let before = 'field';
+    function zoomAt(px, py) {
+      before = mode; setMode('zoom'); auto = false; stopPlay();
+      const s1 = MOBILE.matches ? 2.4 : 2.5, wx = (px - view.x) / view.s, wy = (py - view.y) / view.s;
+      go({ s: s1, x: px - wx * s1, y: py - wy * s1 }, 800);
+    }
+    function zoomOut() { if (before === 'feature' && cur >= 0) feature(cur); else toField(); }
+    const hit = (px, py) => {
+      if (!L) return null; const wx = (px - view.x) / view.s, wy = (py - view.y) / view.s, pad = 4 / view.s;
+      const it = L.items.find(it => wx > it.x - pad && wx < it.x + L.cw + pad && wy > it.y - it.lh - pad && wy < it.y + it.h + it.lh * 0.4 + pad);
+      return it ? it.i : null;
+    };
+
+    // ---- pointer: tap to look closer, tap a message to read it, drag to move around when close ----
+    let down = null;
+    fc.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false }; if (mode === 'zoom') fc.setPointerCapture(e.pointerId); });
+    fc.addEventListener('pointermove', e => {
+      const r = stage.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      if (down && mode === 'zoom') {
+        const dx = e.clientX - down.x, dy = e.clientY - down.y;
+        if (down.moved || Math.hypot(dx, dy) > 6) { down.moved = true; sec.classList.add('dragging'); view = clampView({ s: view.s, x: down.vx + dx, y: down.vy + dy }); paint(true); return; }
+      }
+      if (mode === 'zoom' && e.pointerType === 'mouse') { const h = hit(px, py); if (h !== hover) { hover = h; paint(true); } }
+    });
+    const up = e => {
+      sec.classList.remove('dragging');
+      if (!down) return; const d = down; down = null; if (d.moved || e.type === 'pointercancel') return;
+      const r = stage.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      if (mode === 'zoom') { const h = hit(px, py); if (h != null) feature(h); }
+      else zoomAt(px, py);
+    };
+    fc.addEventListener('pointerup', up); fc.addEventListener('pointercancel', up);
+    fc.addEventListener('pointerleave', () => { if (hover != null) { hover = null; paint(true); } });
+    $('.js-zoomout').addEventListener('click', zoomOut);
+    $('.js-next').addEventListener('click', () => { stopPlay(); step(1); });
+    $('.js-prev').addEventListener('click', () => { stopPlay(); step(-1); });
+    // swipe between messages on the panel
+    let sw = null;
+    card.addEventListener('pointerdown', e => { if (!e.target.closest('button, input, a')) sw = { x: e.clientX, y: e.clientY }; });
+    card.addEventListener('pointerup', e => { if (!sw) return; const dx = e.clientX - sw.x, dy = e.clientY - sw.y; sw = null; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) { stopPlay(); step(dx < 0 ? 1 : -1); } });
+    addEventListener('keydown', e => {
+      if (!inView || e.target.closest('input, textarea')) return;
+      if (e.key === 'Escape' && mode === 'zoom') zoomOut();
+      if (mode !== 'feature') return;
+      if (e.key === 'ArrowRight') { stopPlay(); step(1); } else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); }
+    });
+
+    // ---- play: a new voice every few seconds, for a screen at the celebration ----
+    function stopPlay() { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; }
+    playBtn.addEventListener('click', () => {
+      if (timer) return stopPlay();
+      playBtn.textContent = 'Pause'; timer = setInterval(() => { if (!paused) step(1); }, 7000);
+      if (mode !== 'feature') feature(list[pos] ?? list[0]);
+    });
+    card.addEventListener('mouseenter', () => { paused = true; }); card.addEventListener('mouseleave', () => { paused = false; });
+
+    // ---- search and facet filter, inside the sheet ----
+    sBtn.addEventListener('click', () => {
+      const open = sPanel.hidden; sPanel.hidden = !open; sBtn.setAttribute('aria-expanded', open);
+      if (open) sInput.focus({ preventScroll: true }); else { sInput.value = ''; q = ''; qf = 'all'; filter(); }
+      placeLead();
+    });
+    function chips() {
+      sFilters.innerHTML = [['all', 'All'], ...FACETS.map(f => [f.code, f.short])].map(([c, l]) => `<button type="button" data-f="${c}" aria-pressed="${qf === c}">${l}</button>`).join('');
+    }
+    sFilters.addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { qf = b.dataset.f; chips(); filter(); } });
+    let st = 0; sInput.addEventListener('input', () => { clearTimeout(st); st = setTimeout(() => { q = sInput.value.trim().toLowerCase(); filter(); }, 160); });
+    function filter() {
+      stopPlay();
+      if (!q && qf === 'all') { matches = null; list = readOrder(); }
+      else {
+        const ok = i => { const m = messages[i]; return (qf === 'all' || m.facets.has(qf)) && (!q || (m.text + ' ' + (m.name || '') + ' ' + (m.rel || '')).toLowerCase().includes(q)); };
+        list = readOrder().filter(ok); matches = new Set(list);
+      }
+      sec.classList.toggle('searching', !!matches);
+      if (L) renderBase();
+      if (list.length) feature(list[0]); else { nEl.textContent = 'No messages match'; }
+    }
+
+    // ---- scroll: the sheet first, then one voice ----
+    function onScroll() {
+      const r = sec.getBoundingClientRect(); inView = r.top < innerHeight && r.bottom > 0;
+      body.classList.toggle('on-board', r.top < innerHeight * 0.5 && r.bottom > innerHeight * 0.5);
+      if (!inView) { if (timer) stopPlay(); return; }
+      if (!L) { build(); return; }
+      const p = -r.top / Math.max(1, r.height - innerHeight);
+      if (mode === 'field' && p > 0.3) { auto = true; feature(list[pos] ?? list[0], true); }
+      else if (mode === 'feature' && auto && p < 0.12) { auto = false; toField(); }
+    }
+    function build() {
+      if (building) return building;
+      building = Promise.race([Promise.all(['400 10px Newsreader', '500 10px Archivo'].map(f => document.fonts.load(f))).catch(() => {}), new Promise(r => setTimeout(r, 1500))])
+        .then(() => { list = readOrder(); chips(); layout(); onScroll(); });
+      return building;
+    }
+    addEventListener('scroll', onScroll, { passive: true });
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (!L) return; view = { s: 1, x: 0, y: 0 }; if (mode === 'zoom') setMode('field'); layout(); if (mode === 'feature') feature(cur); }, 200); });
+    // a newly written message joins the sheet and is the first voice you meet there
+    function added() { if (!L) return; list = matches ? list : readOrder(); pos = 0; layout(); }
+    return { added };
+  })();
 
   // ---------------- boot ----------------
   (async function boot() {
