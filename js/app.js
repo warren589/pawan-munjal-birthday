@@ -87,9 +87,9 @@
           ${f.img ? '' : '<p class="pending-photo">Placeholder silhouette · photograph to come</p>'}
         </div>
       </section>`);
-    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${f.ink[1]}"><span>${f.name}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
+    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${f.ink[1]}"><span>${f.name}</span><canvas class="thumb" aria-hidden="true"></canvas><b>${String(i + 1).padStart(2, '0')}</b></button>`);
   });
-  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#161311"><span>The whole person</span><b>∗</b></button>`);
+  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#161311"><span>The whole person</span><canvas class="thumb" aria-hidden="true"></canvas><b>∗</b></button>`);
   chapters.addEventListener('click', e => {
     const b = e.target.closest('.js-story'); if (!b) return;
     const st = b.nextElementSibling, open = st.hidden;
@@ -257,6 +257,21 @@
       n.el.classList.toggle('vis', o > 0.02); n.el.classList.toggle('live', o > 0.6);
     }
   }
+  // the navigation on desktop: each facet as a miniature of its own portrait, drawn from the prepared texture
+  function drawThumbs() {
+    body.classList.toggle('thumbs', !MOBILE.matches);   // phones keep the numbered dots
+    if (MOBILE.matches) return;
+    $$('button', rail).forEach(btn => {
+      const st = btn.dataset.go === 'final' ? 'final' : btn.dataset.go, c = btn.querySelector('.thumb');
+      if (!c || c.dataset.done === st + W + 'x' + H || !wp.isReady(spec(st), W, H, dpr)) return;
+      const L = layoutFor(st), tw = c.clientWidth || 44, th = c.clientHeight || 44, d = 2;
+      c.width = tw * d; c.height = th * d;
+      const x = c.getContext('2d'), k = Math.min(tw / L.W, th / L.H), w = L.W * k, h = L.H * k;
+      x.imageSmoothingQuality = 'high'; x.clearRect(0, 0, c.width, c.height);
+      x.drawImage(L.tex, (tw - w) / 2 * d, (th - h) * d, w * d, h * d);   // bottom-centred, like the portraits themselves
+      c.dataset.done = st + W + 'x' + H;
+    });
+  }
   function syncState(s) {
     if (s === current) return; current = s;
     const ai = s === 'hero' ? -1 : s === 'final' ? 7 : +s;
@@ -300,7 +315,7 @@
     });
   }
   // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
-  function warm() { warmGen++; run(jobsFor(STATES), 7); }
+  function warm() { warmGen++; run(jobsFor(STATES), 7).then(drawThumbs); }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
@@ -686,7 +701,9 @@
     // every portrait and every shuffle between neighbours; if a slow device takes too long, the page opens anyway and
     // the rest carries on in the background
     const all = run(jobsFor(order), 150, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
+    all.then(drawThumbs);
     await Promise.race([all, new Promise(r => setTimeout(r, 9000))]);
+    drawThumbs();
     ready = true; kick();
     await new Promise(r => setTimeout(r, 250));
     body.classList.add('ready'); body.classList.remove('booting'); kick();

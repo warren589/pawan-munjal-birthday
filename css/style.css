@@ -52,6 +52,19 @@ body[data-state="hero"] .rail, body:not([data-state]) .rail { pointer-events: no
 @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(168, 69, 44, .5); } 100% { box-shadow: 0 0 0 12px rgba(168, 69, 44, 0); } }
 .rail button.ping::after { background: var(--accent); border-color: var(--accent); animation: ping 1s var(--ease) 2; }
 
+/* desktop: the facets as miniature portraits. Only the one you are on is in colour; the rest wait in grey */
+.rail .thumb { display: block; width: 44px; height: 44px; }
+body.thumbs .rail { right: 22px; gap: 6px; }
+body.thumbs .rail::before, body.thumbs .rail::after { display: none; }
+body.thumbs .rail button { padding: 4px; border-radius: 4px; transition: background .3s var(--ease); }
+body.thumbs .rail button b, body.thumbs .rail button::after { display: none; }
+body.thumbs .rail button .thumb { filter: grayscale(1); opacity: .42; transition: opacity .4s var(--ease), filter .4s var(--ease), transform .4s var(--ease); transform: scale(.9); }
+body.thumbs .rail button:hover .thumb { opacity: .7; }
+body.thumbs .rail button.on .thumb { filter: none; opacity: 1; transform: none; }
+body.thumbs .rail button.on { background: rgba(29, 26, 23, .04); }
+body.thumbs .rail button span { right: calc(100% + 10px); color: var(--ink); }
+body.thumbs .rail button.ping .thumb { animation: thumbPing 1s var(--ease) 2; }
+@keyframes thumbPing { 0%, 100% { opacity: .42; } 50% { opacity: 1; filter: none; } }
 /* ---------- stage: one sticky portrait, notes scroll past it ---------- */
 main { position: relative; }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; z-index: 1; overflow: hidden; }
@@ -225,6 +238,7 @@ textarea.err { border-color: var(--accent); }
   .rail::before, .rail::after { display: none; }
   .rail button { padding: 4px 6px 14px; text-align: center; }
   .rail button span { display: none; }
+  .rail .thumb { display: none; }
   .rail button::after { right: 50%; top: auto; bottom: 2px; transform: translateX(50%); width: 5px; height: 5px; }
   .rail button.on::after { box-shadow: none; width: 7px; height: 7px; }
   /* the bottom of the screen belongs to the facet text now: these sit just under the header instead */
