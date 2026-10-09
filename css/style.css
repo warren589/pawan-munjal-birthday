@@ -56,7 +56,7 @@ body[data-state="hero"] .rail, body:not([data-state]) .rail { pointer-events: no
 main { position: relative; }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; z-index: 1; overflow: hidden; }
 /* portraits stand on the bottom edge of the screen */
-.frame { position: absolute; bottom: 0; left: 33%; transform: translateX(-50%); opacity: 0; transition: opacity 1.2s var(--ease); }
+.frame { position: absolute; bottom: 0; left: 31%; transform: translateX(-50%); opacity: 0; transition: opacity 1.2s var(--ease); }
 body.ready .frame { opacity: 1; }
 .portrait { display: block; }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
@@ -209,10 +209,10 @@ textarea.err { border-color: var(--accent); }
   .mark span { display: none; }
   .frame, .loading { left: 50%; top: calc(var(--hdr) + 2px); bottom: auto; transform: translate(-50%, 0); }
   .sec { padding: 0; min-height: 110svh; }
-  .note, .hero .note { left: 0; right: 0; top: auto; bottom: calc(58px + env(safe-area-inset-bottom)); width: auto; padding: 0 20px; transform: translateY(var(--ny, 0px)); }
-  .hero .note { bottom: calc(22px + env(safe-area-inset-bottom)); }
+  /* the same gap under every portrait: the text starts just below the portrait's box (portraits sit on its bottom edge) */
+  .note, .hero .note { left: 0; right: 0; top: calc(var(--hdr) + 2px + var(--stageH, 50svh) + 22px); bottom: auto; width: auto; padding: 0 20px; transform: translateY(var(--ny, 0px)); }
   .final { min-height: 100svh; align-items: flex-end; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-  .final .note { left: auto; right: auto; bottom: auto; }
+  .final .note { left: auto; right: auto; top: auto; bottom: auto; }
   .note .eyebrow { margin-bottom: 10px; }
   .note h1, .note h2, .hero h1 { font-size: 30px; margin-bottom: 10px; }
   .note .lede { font-size: 15px; margin-bottom: 16px; }

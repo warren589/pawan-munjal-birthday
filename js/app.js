@@ -109,9 +109,10 @@
     const vw = innerWidth, vh = innerHeight;
     // the stage box; each portrait fits inside it at its own aspect, bottom-centred
     if (MOBILE.matches) { W = Math.round(vw - 24); H = Math.round(Math.min(vh * (vh < 700 ? 0.46 : vh < 780 ? 0.52 : 0.56), W * 1.4)); }
-    else { W = Math.round(vw * 0.58); H = Math.round(vh - 76); }   // from just under the header to the bottom edge
+    else { W = Math.round(vw * 0.54); H = Math.round(vh - 76); }   // from just under the header to the bottom edge; narrow enough that wide photos keep clear of the text
     dpr = Math.min(2, devicePixelRatio || 1);
     frame.style.width = W + 'px'; frame.style.height = H + 'px';
+    document.documentElement.style.setProperty('--stageH', H + 'px');   // phones set the text just below the portrait
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
   }
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
