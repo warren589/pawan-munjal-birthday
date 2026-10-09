@@ -107,7 +107,11 @@
         const font = wt => `${wt} ${fs}px ${FONT}`;
         const widths = new Map();
         const measure = (w, wt) => { const k = wt + w; let v = widths.get(k); if (v === undefined) { x.font = font(wt); v = x.measureText(w).width; widths.set(k, v); } return v; };
+        // the fine layer is only ever shown inside the head ellipses: set words only near them, not across the whole portrait
+        const m = fs * 3 + 10, boxes = region === 'head' ? heads.map(h => [(h[0] - h[2]) * W - m, (h[0] + h[2]) * W + m, (h[1] - h[3]) * H - m, (h[1] + h[3]) * H + m]) : null;
+        const near = (x0, x1, yy) => !boxes || boxes.some(b => x1 > b[0] && x0 < b[1] && yy > b[2] && yy < b[3]);
         for (let y = lh * 0.92, row = 0; y < H + amp + lh; y += lh, row++) {
+          if (boxes && !boxes.some(b => y > b[2] && y < b[3] + amp)) { if (row % 6 === 5) yield; continue; }
           let px = -R() * fs * 5;
           while (px < W) {
             const pick = spec.words[(R() * spec.words.length) | 0], text = pick.t.toUpperCase();
@@ -120,7 +124,7 @@
             const u = (px + w / 2) / W;
             // any word touching the silhouette is set; the smoothed outline trims it afterwards
             const inside = M(u, v0) > 0.5 || M(Math.min(1, (px + w) / W), v0) > 0.5 || M(Math.max(0, px / W), v0) > 0.5;
-            if (inside) {
+            if (inside && near(px, px + w, yb)) {
               const y0 = base(px, y), y1 = base(px + w, y), ang = Math.atan2(y1 - y0, w);
               x.font = font(wt);
               x.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * px, dpr * y0);

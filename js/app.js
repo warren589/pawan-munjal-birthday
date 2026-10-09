@@ -108,7 +108,7 @@
   function geometry() {
     const vw = innerWidth, vh = innerHeight;
     // the stage box; each portrait fits inside it at its own aspect, bottom-centred
-    if (MOBILE.matches) { W = Math.round(vw - 24); H = Math.round(Math.min(vh * 0.58, W * 1.5)); }
+    if (MOBILE.matches) { W = Math.round(vw - 24); H = Math.round(Math.min(vh * (vh < 700 ? 0.46 : vh < 780 ? 0.52 : 0.56), W * 1.4)); }
     else { W = Math.round(vw * 0.58); H = Math.round(vh - 76); }   // from just under the header to the bottom edge
     dpr = Math.min(2, devicePixelRatio || 1);
     frame.style.width = W + 'px'; frame.style.height = H + 'px';
@@ -230,7 +230,7 @@
       anim = drawPortrait(b.a, 1 - b.e, 0, 1, now) || anim;
       anim = drawPortrait(b.b, b.e, 0, 1, now) || anim;
     } else anim = drawPortrait(b.a, 1, 0, 1, now) || anim;
-    syncState(view.state);
+    syncState(view.state); placeNotes(b);
     // the line is only there while a facet is settled; it fades through the crossfade
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
     if (anim) kick();
@@ -238,6 +238,24 @@
   const kick = () => { if (!raf) raf = requestAnimationFrame(frameDraw); };
   addEventListener('scroll', kick, { passive: true });
 
+  // The text beside (or, on a phone, under) the portrait stays in one place. As you scroll between two facets, the
+  // current note fades and drifts up while the portrait reshapes, and the next one rises into place as the new portrait
+  // forms; the small vertical drift keeps the feeling of scrolling.
+  const notes = $$('.flow .sec').map(sec => ({ s: sec.dataset.state, el: sec.querySelector('.note'), o: -1, y: 0 }));
+  function placeNotes(b) {
+    const D = MOBILE.matches ? 18 : 26;
+    for (const n of notes) {
+      let o = 0, y = 0;
+      if (n.s === b.a && b.a === b.b) o = 1;
+      else if (n.s === b.a) { o = 1 - smooth(0.04, 0.42, b.e); y = -D * smooth(0, 0.5, b.e); }
+      else if (n.s === b.b) { o = smooth(0.58, 0.96, b.e); y = D * (1 - smooth(0.5, 1, b.e)); }
+      o = Math.round(o * 100) / 100; y = Math.round(y * 2) / 2;
+      if (o === n.o && y === n.y) continue;
+      n.o = o; n.y = y;
+      n.el.style.setProperty('--no', o); n.el.style.setProperty('--ny', y + 'px');
+      n.el.classList.toggle('vis', o > 0.02); n.el.classList.toggle('live', o > 0.6);
+    }
+  }
   function syncState(s) {
     if (s === current) return; current = s;
     const ai = s === 'hero' ? -1 : s === 'final' ? 7 : +s;
@@ -654,12 +672,14 @@
     geometry();
     // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
     // the shuffles between them); the rest is prepared in the background once the page is open
-    const bar = $('.loader__bar i'), first = [...new Set([blend().a, blend().b, 'hero', '0', '1'])];
-    await run(jobsFor(first), 40, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
+    const bar = $('.loader__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
+    // every portrait and every shuffle between neighbours; if a slow device takes too long, the page opens anyway and
+    // the rest carries on in the background
+    const all = run(jobsFor(order), 150, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
+    await Promise.race([all, new Promise(r => setTimeout(r, 9000))]);
     ready = true; kick();
     await new Promise(r => setTimeout(r, 250));
     body.classList.add('ready'); body.classList.remove('booting'); kick();
     setTimeout(() => { const l = $('.loader'); if (l) l.remove(); }, 900);
-    setTimeout(warm, 400);
   })();
 })();
