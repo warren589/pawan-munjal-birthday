@@ -480,7 +480,7 @@
     const t = $('.toast'); t.hidden = false; requestAnimationFrame(() => t.classList.add('open'));
     clearTimeout(t._t); t._t = setTimeout(closeToast, 9000);
     $$('.js-find').forEach(b => { b.hidden = false; });
-    renderLetters(); board.added();
+    board.added();
   }
   function closeToast() { const t = $('.toast'); t.classList.remove('open'); clearTimeout(t._t); t._t = setTimeout(() => { t.hidden = true; }, 400); }
   $('.js-close-toast').addEventListener('click', closeToast);
@@ -492,24 +492,7 @@
   }
   $$('.js-find').forEach(b => b.addEventListener('click', () => toggleFind()));
 
-  // ---------------- letters: every message in one continuous column ----------------
-  const lettersBody = $('.letters__body'), filters = $('.letters .filters'), search = $('.letters .search input');
-  let lq = '';
-  function marked(m) {
-    const ex = extract(m.text), spans = [];
-    ex.found.forEach((f, w) => { if (m.words.includes(w)) f.spans.forEach(sp => spans.push([...sp, w])); });
-    spans.sort((a, b) => a[0] - b[0]);
-    let out = '', at = 0;
-    spans.forEach(([a, b, w]) => {
-      if (a < at) return; const ink = FACETS[CODES.indexOf(facetsOf(w)[0])].ink[0];
-      out += esc(m.text.slice(at, a)) + `<u style="--u:${ink}">${esc(m.text.slice(a, b))}</u>`; at = b;
-    });
-    return out + esc(m.text.slice(at));
-  }
-  // Long letters, found before they are read: each row leads with the letter's most telling sentence (the one with the
-  // most portrait words, since openings are often generic), signed with name, relationship, facet marks and reading time.
-  // Every eighth row is set as a larger pull quote, so the list reads like a page rather than an inbox.
-  const GROUPS = window.LETTER_GROUPS, COUNTS = window.LETTER_COUNTS;
+  // ---------------- letters: the long-form demo letters, read on the wall ----------------
   const letters = window.LETTERS.map(l => {
     const text = l.paras.join(' '), ex = extract(text);
     const sentences = l.paras.flatMap(p => p.replace(/\b(Mr|Mrs|Ms|Dr|St)\./g, '$1\u2024').match(/[^.!?]+[.!?]+[”"’]?/g) || [p]).map(t => t.trim().replace(/\u2024/g, '.'));   // titles like “Mr.” don't end a sentence
@@ -518,167 +501,119 @@
     const words = text.split(/\s+/).length;
     return { ...l, text, lead, facets: [...new Set(ex.words.flatMap(w => facetsOf(w, ex.fallback)))].slice(0, 3), mins: Math.max(1, Math.round(words / 200)) };
   });
-  let lg = 'all', lshown = 12;
-  const dots = codes => codes.map(c => `<i style="--c:${FACETS[CODES.indexOf(c)].ink[0]}" title="${FACETS[CODES.indexOf(c)].name}"></i>`).join('');
-  function letterHTML(l, i, featured) {
-    const full = l.paras ? l.paras.map(p => `<p>${marked({ text: p, words: extract(p).words })}</p>`).join('') : `<p>${marked(l)}</p>`;
-    return `<article class="lrow${featured ? ' feat' : ''}${l.mine ? ' mine' : ''}" data-i="${i}">
-      <button class="lrow__q" type="button" aria-expanded="false"><span class="lrow__lead">“${esc(l.lead)}”</span></button>
-      <div class="lrow__full" hidden><p class="lrow__to">Dear Dr. Munjal,</p>${full}</div>
-      <footer class="lrow__sig"><b>${esc(l.name || 'Anonymous')}</b><span>${esc(l.rel || '')}</span>
-        ${l.mine ? '<em>Your letter · pending approval</em>' : ''}<span class="lrow__meta"><span class="lrow__dots">${dots(l.facets)}</span>${l.mins} min read</span>
-        <span class="lrow__go">Read the letter →</span></footer>
-    </article>`;
-  }
-  function renderLetters() {
-    const q = lq.toLowerCase();
-    // your own message comes first, then the letters
-    const mine = messages.filter(m => m.mine).reverse().map(m => ({ name: m.name, rel: m.rel, cat: 'mine', mine: true, text: m.text, words: m.words, lead: m.text, facets: [...m.facets].slice(0, 3), mins: 1 }));
-    const all = [...mine, ...letters];
-    const list = all.filter(l => (lg === 'all' || l.cat === lg || l.mine) && (!q || (l.text + ' ' + (l.name || '') + ' ' + (l.rel || '')).toLowerCase().includes(q)));
-    let n = 0;
-    lettersBody.innerHTML = list.slice(0, lshown).map((l, k) => { const feat = !l.mine && (++n % 8 === 0); return letterHTML(l, all.indexOf(l), feat); }).join('');
-    lettersBody._list = all;
-    $('.letters__empty').hidden = list.length > 0;
-    $('.js-more').hidden = list.length <= lshown;
-    const total = Object.values(COUNTS).reduce((a, b) => a + b, 0);
-    filters.innerHTML = [['all', 'All', total], ...GROUPS.map(([c, l]) => [c, l, COUNTS[c]])].map(([c, l, k]) =>
-      `<button type="button" data-f="${c}" aria-pressed="${lg === c}">${l} <span>${k.toLocaleString('en-IN')}</span></button>`).join('');
-  }
-  // a row opens in place (the pinned close bar and links from the voices come next)
-  lettersBody.addEventListener('click', e => {
-    const b = e.target.closest('.lrow__q, .lrow__go'); if (!b) return;
-    const lrow = b.closest('.lrow'), full = lrow.querySelector('.lrow__full'), open = full.hidden;
-    full.hidden = !open; lrow.classList.toggle('open', open); lrow.querySelector('.lrow__q').setAttribute('aria-expanded', open);
-    lrow.querySelector('.lrow__go').textContent = open ? 'Close' : 'Read the letter →';
-  });
-  filters.addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { lg = b.dataset.f; lshown = 12; renderLetters(); } });
-  search.addEventListener('input', () => { lq = search.value.trim(); lshown = 12; renderLetters(); });
-  $('.js-more').addEventListener('click', () => { lshown += 12; renderLetters(); });
-  // more letters arrive as you reach the end of the list
-  new IntersectionObserver(es => { if (es[0].isIntersecting && !$('.js-more').hidden) { lshown += 12; renderLetters(); } }, { rootMargin: '400px' }).observe($('.js-more'));
-  renderLetters();
-  new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
   // ---------------- the messages: a wall of letters that settles into a grid ----------------
-  // The section opens on letters scattered in layers around the count, held in place for a moment. Scrolling on, every
-  // letter travels to its place in a masonry grid; the decorative ones at the back fade away. Once settled, the grid's
-  // columns drift at slightly different speeds as you scroll (a quiet parallax). No sticky positioning: each card's
-  // place is worked out from the scroll position, in the section's own coordinates.
+  // A sticky stage holds the letters, scattered in layers around the count. Scrolling on, every letter travels to its place
+  // in a masonry grid; then the stage lets go and the grid scrolls on with the page, its columns drifting at slightly
+  // different rates. The browser pins the stage itself (position: sticky), so nothing shakes against the screen; the
+  // script only works out how far each letter has travelled.
   const board = (() => {
-    const sec = $('.wall'), cardsEl = $('.wall__cards'), head = $('.wall__head');
-    const HOLD = 0.45, MORPH = 1.1;           // viewport heights: scattered and pinned, then the move into the grid
-    let pS = -1, aS = 0, cards = [], items = [], vw = 0, vh = 0, gridTop = 0, colX = [], colH = [], cw = 0, raf = 0, hdr = 64;
-    const R0 = seeded(91);
+    const sec = $('.wall'), pin = $('.wall__pin'), stage = $('.wall__stage'), cardsEl = $('.wall__cards'), head = $('.wall__head'), rest = $('.wall__rest');
+    const HOLD = 0.4, MORPH = 1.0;            // viewport heights: scattered and held, then the move into the grid
+    let cards = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0;
     const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    const dot = m => { const c = [...(m.facets || [])][0], f = FACETS[CODES.indexOf(c)]; return f ? f.ink[0] : 'transparent'; };
 
-    // every letter: the short messages and the long letters (as their opening paragraph)
+    // every letter, in full: the short messages and the long letters, your own first
     function source() {
-      const mine = messages.filter(m => m.mine).reverse().map(m => ({ ...m, text: m.text }));
+      const mine = messages.filter(m => m.mine).reverse();
       const short = messages.filter(m => !m.mine);
-      const long = letters.map(l => ({ name: l.name, rel: l.rel, text: l.paras[0], more: l.paras.slice(1), facets: new Set(l.facets) }));
+      const long = letters.map(l => ({ name: l.name, rel: l.rel, paras: l.paras, img: l.img }));
       const out = [], a = short.slice(), b = long.slice();
       while (a.length || b.length) { if (a.length) out.push(a.shift()); if (a.length) out.push(a.shift()); if (b.length) out.push(b.shift()); }
       return [...mine, ...out];
     }
     function cardHTML(m, deco) {
-      return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ' tabindex="0"'}>
-        <i class="wcard__dot" style="background:${dot(m)}"></i>
-        <p class="wcard__to">Dear Dr. Munjal,</p>
-        <p class="wcard__t">${esc(m.text)}</p>${m.more ? `<div class="wcard__more">${m.more.map(p => `<p>${esc(p)}</p>`).join('')}</div>` : ''}
-        <p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}
+      const paras = m.paras || [m.text];
+      return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ''}>
+        ${m.img ? `<img class="wcard__img" src="${m.img.src}" alt="" style="aspect-ratio:${m.img.w}/${m.img.h}" loading="eager" decoding="async">` : ''}
+        <div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>
+        ${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}
+        <p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}</div>
       </article>`;
     }
     function build() {
-      items = source();
-      const deco = [];   // letters at the back of the scattered view only, for density; they fade as the grid forms
+      const items = source(), deco = [];   // a few letters only for the scattered view's depth; they fade as the grid forms
       for (let i = 0; i < (MOBILE.matches ? 4 : 10); i++) deco.push(items[(i * 7 + 3) % items.length]);
       cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('');
       cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length }));
       layout();
     }
 
-    // ---- the two arrangements ----
+    // ---- the two arrangements, in the stage's own coordinates ----
     function layout() {
-      vw = sec.clientWidth; vh = innerHeight; hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
-      const mob = MOBILE.matches, gap = mob ? 14 : 22, cols = mob ? 2 : vw > 1500 ? 5 : vw > 1100 ? 4 : 3, pad = mob ? 14 : 48;
-      cw = Math.floor((vw - pad * 2 - gap * (cols - 1)) / cols);
-      cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; });
-      gridTop = vh * (HOLD + MORPH) + hdr + (mob ? 24 : 40);
-      // masonry: each letter goes to the shortest column
-      colX = Array.from({ length: cols }, (_, k) => pad + k * (cw + gap)); colH = colX.map(() => 0);
-      cards.forEach(c => { c.h = c.el.offsetHeight; if (c.deco) return; const k = colH.indexOf(Math.min(...colH)); c.col = k; c.gx = colX[k]; c.gy = colH[k]; colH[k] += c.h + gap; });
-      // each column drifts at its own small rate once the grid has formed
-      const rates = mob ? [-0.05, 0.05] : [-0.07, 0.04, -0.02, 0.06, -0.04];
-      cards.forEach(c => { c.rate = c.deco ? 0 : rates[c.col % rates.length]; });
-      sec.style.height = Math.round(gridTop + Math.max(...colH) + vh * 0.35) + 'px';
-      // scattered: a few large letters in front around the count, the rest smaller behind, the decorative ones at the back
-      const R = seeded(17), front = mob ? [[0.04, 0.12], [0.52, 0.1], [0.06, 0.74], [0.5, 0.78]]
-        : [[0.04, 0.1], [0.27, 0.07], [0.6, 0.08], [0.82, 0.16], [0.02, 0.46], [0.84, 0.5], [0.06, 0.78], [0.3, 0.8], [0.56, 0.8], [0.8, 0.82]];
-      const clear = (x, y, w, h) => { const cx = vw / 2, cy = vh * 0.48, rx = vw * (mob ? 0.42 : 0.24), ry = vh * (mob ? 0.16 : 0.2); return Math.abs(x + w / 2 - cx) < rx + w / 2 && Math.abs(y + h / 2 - cy) < ry + h / 2; };
+      vw = sec.clientWidth; vh = innerHeight; lastW = vw;
+      const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
+      const mob = MOBILE.matches, cols = mob ? (vw > 560 ? 2 : 1) : vw > 1500 ? 4 : vw > 980 ? 3 : 2;
+      const gap = mob ? 18 : 40, maxW = cols * 380 + (cols - 1) * gap, side = Math.max(mob ? 18 : 56, (vw - maxW) / 2);
+      const cw = Math.floor((vw - side * 2 - gap * (cols - 1)) / cols);
+      stage.style.height = vh + 'px';
+      cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; c.el.style.clipPath = ''; });
+      // masonry: each letter to the shortest column
+      gTop = hdr + (mob ? 28 : 56);
+      const colX = Array.from({ length: cols }, (_, k) => side + k * (cw + gap)), colH = colX.map(() => 0);
+      const rates = [-0.05, 0.04, -0.03, 0.05];
+      cards.forEach(c => { c.h = c.el.offsetHeight; if (c.deco) return; const k = colH.indexOf(Math.min(...colH)); c.gx = colX[k]; c.gy = colH[k]; c.rate = cols > 1 ? rates[k % 4] : 0; colH[k] += c.h + gap; });
+      const gridH = Math.max(...colH);
+      // the stage stays pinned through the scatter and the move; the grid then carries on below it
+      pin.style.height = Math.round(vh * (HOLD + MORPH) + vh) + 'px';
+      rest.style.height = Math.max(0, Math.round(gTop + gridH - vh + vh * 0.25)) + 'px';
+      // scattered: a few large letters in front around the count, the rest smaller behind, washed and out of focus;
+      // long letters are shown only down to a few lines here, and unfold as they reach the grid
+      const R = seeded(17), front = mob ? [[0.05, 0.11], [0.5, 0.09], [0.04, 0.72], [0.5, 0.76]]
+        : [[0.04, 0.1], [0.27, 0.07], [0.6, 0.08], [0.82, 0.14], [0.02, 0.48], [0.84, 0.5], [0.06, 0.78], [0.31, 0.8], [0.57, 0.8], [0.8, 0.82]];
+      const clipH = mob ? 210 : 250;
+      const clear = (x, y, w, h) => { const cx = vw / 2, cy = vh * 0.48, rx = vw * (mob ? 0.42 : 0.24), ry = vh * (mob ? 0.15 : 0.19); return Math.abs(x + w / 2 - cx) < rx + w / 2 && Math.abs(y + h / 2 - cy) < ry + h / 2; };
       let f = 0;
       cards.forEach((c, i) => {
         const layer = c.deco ? 0 : f < front.length ? 2 : 1;
-        const sc = layer === 2 ? (mob ? 0.72 : 0.88) : layer === 1 ? (mob ? 0.5 : 0.62) : (mob ? 0.42 : 0.5);
-        let x, y, tries = 0;
+        const sc = layer === 2 ? (mob ? 0.62 : 0.8) : layer === 1 ? (mob ? 0.45 : 0.56) : (mob ? 0.38 : 0.46);
+        c.cut = Math.max(0, c.h - clipH);
+        let x, y, t = 0;
         if (layer === 2) { const [u, v] = front[f++]; x = u * vw; y = Math.max(hdr, v * vh); }
-        else do { x = -cw * 0.2 + R() * (vw + cw * 0.1); y = hdr - 20 + R() * (vh - hdr); } while (tries++ < 30 && clear(x, y, cw * sc, c.h * sc));
-        c.sx = x; c.sy = y; c.ss = sc; c.layer = layer; c.el.style.zIndex = layer + 1;
-        c.wash = layer === 2 ? 0 : layer === 1 ? 0.35 : 0.55;   // farther letters washed towards the paper, never see-through
-        c.blur = layer === 2 ? 0 : layer === 1 ? 1.4 : 2.6;    // and softly out of focus, so the front letters lead
+        else do { x = -cw * 0.2 + R() * (vw + cw * 0.1 - cw * sc); y = hdr - 20 + R() * (vh - hdr - clipH * sc * 0.5); } while (t++ < 30 && clear(x, y, cw * sc, Math.min(c.h, clipH) * sc));
+        Object.assign(c, { sx: x, sy: y, ss: sc, layer, wash: [0.55, 0.35, 0][layer], blur: [2.6, 1.4, 0][layer], d: c.deco ? 0 : (i % 9) / 9 * 0.35 + (layer === 2 ? 0.15 : 0), bl: -1 });
+        c.el.style.zIndex = layer + 1;
       });
       draw();
     }
 
-    // ---- every frame: where each letter is between the two arrangements ----
+    // ---- every frame: how far each letter has travelled ----
     function draw() {
       raf = 0;
-      const r = sec.getBoundingClientRect(), s = -r.top;   // how far into the section we have scrolled
-      // the move into the grid and the parallax follow the scroll with a little easing, so wheel steps never jolt the
-      // letters; the pinned part stays exact, or the scatter would wobble against the screen
-      const pT = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH))), aT = Math.max(0, s - vh * (HOLD + MORPH));
-      if (REDUCED.matches || pS < 0) { pS = pT; aS = aT; } else { pS += (pT - pS) * 0.14; aS += (aT - aS) * 0.14; }
-      if (Math.abs(pT - pS) < 0.0008) pS = pT; if (Math.abs(aT - aS) < 0.3) aS = aT;
-      const p = pS, moving = pS !== pT || aS !== aT;
-      const pinned = Math.min(Math.max(s, 0), vh * (HOLD + MORPH));   // the scattered view rides along with the screen
-      const after = aS;
-      cards.forEach((c, i) => {
-        // the grid forms on screen, then scrolls on with the page; letters set off one after another, front ones last, so the scatter unravels rather than snapping
-        const d = c.deco ? 0 : (i % 9) / 9 * 0.35 + (c.layer === 2 ? 0.15 : 0), e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(Math.min(1, Math.max(0, (p - d) / (1 - 0.5))));
+      const r = sec.getBoundingClientRect(), s = -r.top;
+      const p = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH)));
+      const after = Math.max(0, s - vh * (HOLD + MORPH));   // scroll since the stage let go: drives the column drift
+      for (const c of cards) {
         if (c.deco) {
           const a = 1 - Math.min(1, p * 2.2);
           c.el.style.opacity = a; c.el.style.visibility = a <= 0.01 ? 'hidden' : '';
-          if (!c.bl) { c.bl = c.blur; c.el.style.filter = `blur(${c.blur}px)`; }
-          c.el.style.transform = `translate(${c.sx}px, ${pinned + c.sy - p * 40}px) scale(${c.ss})`;
-          return;
+          c.el.style.transform = `translate(${c.sx}px, ${c.sy - p * 30}px) scale(${c.ss})`;
+          if (c.bl < 0) { c.bl = c.blur; c.el.style.filter = `blur(${c.blur}px)`; c.el.style.setProperty('--wash', c.wash); c.el.style.clipPath = `inset(-40px -40px ${c.cut}px -40px round 8px)`; }
+          continue;
         }
-        const x = c.sx + (c.gx - c.sx) * e, y = pinned + c.sy + (pinned + gridTop - vh * (HOLD + MORPH) + c.gy - after * c.rate - (pinned + c.sy)) * e, sc = c.ss + (1 - c.ss) * e;
-        c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
-        c.el.style.setProperty('--wash', (c.wash * (1 - e)).toFixed(3));
-        const bl = Math.round(c.blur * (1 - e) * 4) / 4; if (bl !== c.bl) { c.bl = bl; c.el.style.filter = bl ? `blur(${bl}px)` : ''; }
-        if (e >= 1 && c.el.style.zIndex !== '1') c.el.style.zIndex = 1; else if (e < 1 && c.el.style.zIndex !== String(c.layer + 1)) c.el.style.zIndex = c.layer + 1;
-      });
-      // the count stays in the middle of the scatter, then steps aside as the letters arrive
-      head.style.transform = `translateY(${pinned}px)`;
+        const e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(Math.min(1, Math.max(0, (p - c.d) / 0.5)));
+        const x = c.sx + (c.gx - c.sx) * e, y = c.sy + (gTop + c.gy - after * c.rate - c.sy) * e, sc = c.ss + (1 - c.ss) * e;
+        c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(4)})`;
+        const k = Math.round((1 - e) * 200) / 200;   // wash, blur and the folded part of long letters, in small steps
+        if (k !== c.k) {
+          c.k = k;
+          c.el.style.setProperty('--wash', (c.wash * k).toFixed(3));
+          const bl = Math.round(c.blur * k * 4) / 4; c.el.style.filter = bl ? `blur(${bl}px)` : '';
+          c.el.style.clipPath = c.cut * k > 0.5 ? `inset(-40px -40px ${(c.cut * k).toFixed(0)}px -40px round 8px)` : '';
+          c.el.style.zIndex = k ? c.layer + 1 : 1;
+        }
+      }
       head.style.opacity = 1 - Math.min(1, p * 2.4);
       head.style.visibility = p > 0.45 ? 'hidden' : '';
-      sec.classList.toggle('settled', p >= 1);
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
-      if (moving) raf = requestAnimationFrame(draw);
       const covered = r.top <= 0 && r.bottom >= vh; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
     }
     const tick = () => { if (!raf) raf = requestAnimationFrame(draw); };
     addEventListener('scroll', tick, { passive: true });
-    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 200); });
+    // re-arrange only when the width changes: a phone's address bar showing or hiding must not move anything
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (sec.clientWidth !== lastW) layout(); }, 200); });
     document.fonts.ready.then(layout);
-
-    // a letter opens in place once the grid has formed; the columns re-flow around it
-    cardsEl.addEventListener('click', e => {
-      const el = e.target.closest('.wcard:not(.deco)'); if (!el || !sec.classList.contains('settled')) return;
-      el.classList.toggle('open'); layout();
-    });
-    cardsEl.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.wcard:not(.deco)')) { e.preventDefault(); e.target.click(); } });
+    cardsEl.addEventListener('load', e => { if (e.target.tagName === 'IMG') { clearTimeout(rt); rt = setTimeout(layout, 120); } }, true);
 
     build();
     // a newly written message joins the wall, first in the front row

@@ -58,28 +58,19 @@
 </main>
 
 <section class="wall" id="messages" aria-labelledby="wall-title">
-  <header class="wall__head">
-    <p class="eyebrow">The messages</p>
-    <h2 id="wall-title"><span class="js-count">2,418</span> voices</h2>
-    <p class="lede">Letters from everyone whose life he has touched.</p>
-  </header>
-  <div class="wall__cards"></div>
-</section>
-
-<section class="letters" id="letters" aria-labelledby="letters-title">
-  <div class="letters__head">
-    <p class="eyebrow">Every message</p>
-    <h2 id="letters-title">In their own words</h2>
-    <p class="lede">Every letter, in full. Choose a connection, or search for a name.</p>
-    <div class="letters__tools">
-      <div class="filters" role="group" aria-label="Filter by connection"></div>
-      <label class="search"><span class="sr">Search messages</span><input type="search" placeholder="Search words or names"></label>
+  <div class="wall__pin">
+    <div class="wall__stage">
+      <header class="wall__head">
+        <p class="eyebrow">The messages</p>
+        <h2 id="wall-title"><span class="js-count">2,418</span> voices</h2>
+        <p class="lede">Letters from everyone whose life he has touched.</p>
+      </header>
+      <div class="wall__cards"></div>
     </div>
   </div>
-  <div class="letters__body"></div>
-  <p class="letters__empty" hidden>No messages match yet.</p>
-  <button class="link js-more" type="button">Show more</button>
+  <div class="wall__rest"></div>
 </section>
+
 <footer class="foot">Prototype · demo messages are fictional</footer>
 
 <aside class="reader" aria-live="polite" aria-labelledby="sheet-word">

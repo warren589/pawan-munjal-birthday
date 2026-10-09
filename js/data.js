@@ -132,7 +132,7 @@ window.LETTERS = [
     'Dear Mr. Munjal, when I presented my first strategy paper to the leadership team, my hands were shaking. Halfway through, the projector failed. You smiled, put your pen down and said, “Tell us without the slides. That is usually the better version.”',
     'It was. And it was the beginning of a lesson you taught me again and again over twelve years: that the idea matters more than the polish, and that people do their best work when someone believes in them first. You always believed in us and pushed us to do better.',
     'Your guidance shaped my whole career and, honestly, the kind of person I try to be at work. Wishing you a joyful birthday and many more years of good health.' ] },
-  { name: 'A. M.', rel: 'Family', cat: 'family', paras: [
+  { name: 'A. M.', img: { src: 'assets/letters/family.jpg', w: 720, h: 480 }, rel: 'Family', cat: 'family', paras: [
     'Papa, I have tried to write this letter for a week, and every version became too long, because how do you fit a whole life of warmth into a page?',
     'I remember Sunday mornings when you put the newspaper down the moment any of us walked in. I remember you teaching me to drive in the factory compound, laughing every time I stalled. I remember that you never once made us feel that your work was more important than us, even when the whole country seemed to need you.',
     'Your warmth and laughter are the heart of our family. Everything good in us, we learned at your dining table. Thank you for every memory, and for the ones still to come. Happy birthday. With all our love.' ] },
@@ -140,7 +140,7 @@ window.LETTERS = [
     'Dear Pawan-san, we first met across a negotiating table in 1987, two companies from two very different cultures, each a little unsure of the other. What I remember most is not the agreement we signed but the dinner afterwards, when you asked about my children by name.',
     'Over the years our relationship grew from partnership into friendship. You showed me that trust is built slowly and kept carefully, and that respect can cross any border. You built bridges between cultures and markets with grace and openness.',
     'India is proud of you, and so are your friends in Japan. I wish you a very happy birthday and continued strength for the road ahead.' ] },
-  { name: 'Kavya Iyer', rel: 'Former trainee', cat: 'students', paras: [
+  { name: 'Kavya Iyer', img: { src: 'assets/letters/mentoring.jpg', w: 720, h: 480 }, rel: 'Former trainee', cat: 'students', paras: [
     'Dear Sir, I was one of forty trainees in the 2009 batch. On our last day you spoke to us for twenty minutes without notes, about patience, about failure, about the difference between ambition and greed.',
     'The humility with which you carry such stature is the greatest lesson I have learned. You stayed afterwards and answered every single question, even the silly ones, as if each of us were the most important person in the room.',
     'I now teach engineering students myself. Every year I tell them about that afternoon. Thank you for showing us that success and simplicity can live together. Happy birthday.' ] },
@@ -148,7 +148,7 @@ window.LETTERS = [
     'Dear Mr. Munjal, eleven years ago our foundation ran three schools with leaking roofs and borrowed books. Today we run twenty-six, and nine hundred girls go to class each morning who might otherwise not have gone at all.',
     'What I admire most is that you never wanted your name on the buildings. You asked about attendance, about the teachers, about whether the girls were staying in school past grade eight. You cared about the impact, not the credit.',
     'Thank you for giving thousands of children access to education and hope. On your birthday, the children of Village Kherwara send their love, and a drawing of a motorcycle that I promised to describe to you as “very fast”.' ] },
-  { name: 'Daniel Okafor', rel: 'Golf partner', cat: 'friends', paras: [
+  { name: 'Daniel Okafor', img: { src: 'assets/letters/golf.jpg', w: 720, h: 491 }, rel: 'Golf partner', cat: 'friends', paras: [
     'Pawan, after twenty years of Sunday rounds I still cannot beat you on the back nine, and I have stopped pretending it is my knees.',
     'Watching you on the golf course taught me that patience and precision win more than power ever will. You never rush a shot, never blame the wind, and you are the most gracious winner I know, which is more annoying than if you were not.',
     'Happy birthday, my friend. Here is to many more rounds, and to the day I finally win one. I am counting on you to let me.' ] },
