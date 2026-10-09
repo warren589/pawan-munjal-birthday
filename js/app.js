@@ -66,7 +66,7 @@
     const S = window.STUDIO;
     return (specs[state] = f
       ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, headWeight: f.headWeight, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
-      : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: state === 'final' ? FACETS.map(x => x.ink) : null, words, seed: state === 'hero' ? 11 : 99 });
+      : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
   // ---------------- chapters, rail ----------------
