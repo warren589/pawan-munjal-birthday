@@ -568,7 +568,7 @@
   const board = (() => {
     const sec = $('.wall'), cardsEl = $('.wall__cards'), head = $('.wall__head');
     const HOLD = 0.45, MORPH = 1.1;           // viewport heights: scattered and pinned, then the move into the grid
-    let cards = [], items = [], vw = 0, vh = 0, gridTop = 0, colX = [], colH = [], cw = 0, raf = 0, hdr = 64;
+    let pS = -1, aS = 0, cards = [], items = [], vw = 0, vh = 0, gridTop = 0, colX = [], colH = [], cw = 0, raf = 0, hdr = 64;
     const R0 = seeded(91);
     const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const dot = m => { const c = [...(m.facets || [])][0], f = FACETS[CODES.indexOf(c)]; return f ? f.ink[0] : 'transparent'; };
@@ -593,7 +593,7 @@
     function build() {
       items = source();
       const deco = [];   // letters at the back of the scattered view only, for density; they fade as the grid forms
-      for (let i = 0; i < (MOBILE.matches ? 14 : 34); i++) deco.push(items[(i * 7 + 3) % items.length]);
+      for (let i = 0; i < (MOBILE.matches ? 4 : 10); i++) deco.push(items[(i * 7 + 3) % items.length]);
       cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('');
       cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length }));
       layout();
@@ -625,7 +625,8 @@
         if (layer === 2) { const [u, v] = front[f++]; x = u * vw; y = Math.max(hdr, v * vh); }
         else do { x = -cw * 0.2 + R() * (vw + cw * 0.1); y = hdr - 20 + R() * (vh - hdr); } while (tries++ < 30 && clear(x, y, cw * sc, c.h * sc));
         c.sx = x; c.sy = y; c.ss = sc; c.layer = layer; c.el.style.zIndex = layer + 1;
-        c.wash = layer === 2 ? 0 : layer === 1 ? 0.35 : 0.62;   // farther letters washed towards the paper, never see-through
+        c.wash = layer === 2 ? 0 : layer === 1 ? 0.35 : 0.55;   // farther letters washed towards the paper, never see-through
+        c.blur = layer === 2 ? 0 : layer === 1 ? 1.4 : 2.6;    // and softly out of focus, so the front letters lead
       });
       draw();
     }
@@ -634,21 +635,28 @@
     function draw() {
       raf = 0;
       const r = sec.getBoundingClientRect(), s = -r.top;   // how far into the section we have scrolled
-      const p = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH)));
+      // the move into the grid and the parallax follow the scroll with a little easing, so wheel steps never jolt the
+      // letters; the pinned part stays exact, or the scatter would wobble against the screen
+      const pT = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH))), aT = Math.max(0, s - vh * (HOLD + MORPH));
+      if (REDUCED.matches || pS < 0) { pS = pT; aS = aT; } else { pS += (pT - pS) * 0.14; aS += (aT - aS) * 0.14; }
+      if (Math.abs(pT - pS) < 0.0008) pS = pT; if (Math.abs(aT - aS) < 0.3) aS = aT;
+      const p = pS, moving = pS !== pT || aS !== aT;
       const pinned = Math.min(Math.max(s, 0), vh * (HOLD + MORPH));   // the scattered view rides along with the screen
-      const after = Math.max(0, s - vh * (HOLD + MORPH));
+      const after = aS;
       cards.forEach((c, i) => {
         // the grid forms on screen, then scrolls on with the page; letters set off one after another, front ones last, so the scatter unravels rather than snapping
         const d = c.deco ? 0 : (i % 9) / 9 * 0.35 + (c.layer === 2 ? 0.15 : 0), e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(Math.min(1, Math.max(0, (p - d) / (1 - 0.5))));
         if (c.deco) {
           const a = 1 - Math.min(1, p * 2.2);
           c.el.style.opacity = a; c.el.style.visibility = a <= 0.01 ? 'hidden' : '';
+          if (!c.bl) { c.bl = c.blur; c.el.style.filter = `blur(${c.blur}px)`; }
           c.el.style.transform = `translate(${c.sx}px, ${pinned + c.sy - p * 40}px) scale(${c.ss})`;
           return;
         }
         const x = c.sx + (c.gx - c.sx) * e, y = pinned + c.sy + (pinned + gridTop - vh * (HOLD + MORPH) + c.gy - after * c.rate - (pinned + c.sy)) * e, sc = c.ss + (1 - c.ss) * e;
         c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
         c.el.style.setProperty('--wash', (c.wash * (1 - e)).toFixed(3));
+        const bl = Math.round(c.blur * (1 - e) * 4) / 4; if (bl !== c.bl) { c.bl = bl; c.el.style.filter = bl ? `blur(${bl}px)` : ''; }
         if (e >= 1 && c.el.style.zIndex !== '1') c.el.style.zIndex = 1; else if (e < 1 && c.el.style.zIndex !== String(c.layer + 1)) c.el.style.zIndex = c.layer + 1;
       });
       // the count stays in the middle of the scatter, then steps aside as the letters arrive
@@ -657,6 +665,7 @@
       head.style.visibility = p > 0.45 ? 'hidden' : '';
       sec.classList.toggle('settled', p >= 1);
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
+      if (moving) raf = requestAnimationFrame(draw);
       const covered = r.top <= 0 && r.bottom >= vh; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
     }
     const tick = () => { if (!raf) raf = requestAnimationFrame(draw); };
