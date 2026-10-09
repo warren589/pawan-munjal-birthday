@@ -3,7 +3,7 @@
 
 window.FACETS = [
   { code: 'L', name: 'Visionary Leader', short: 'Leader', img: 'leader', heads: [[0.45, 0.17, 0.2, 0.15]],
-    ink: ['#4076B9', '#223246'],
+    ink: ['#6B4FA0', '#322741'],
     line: "He saw the road ahead long before anyone else, and built it.",
     anchor: [0.84, 0.52],   // the detail the note's line points to
     story: ["A leader who pairs long-range vision with an unhurried calm: setting direction with conviction, then inviting everyone around him to grow into it.", "Colleagues speak less of the strategy than of the clarity: a sense that the destination was always visible to him, and that he wanted everyone to see it too."] },
@@ -19,22 +19,22 @@ window.FACETS = [
     anchor: [0.84, 0.32],   // the detail the note's line points to
     story: ["The values he carries into every boardroom were shaped at home, and are still kept there.", "Family members describe a man who listens first, laughs easily and is never too busy to be present."] },
   { code: 'M', name: 'Mentor', short: 'Mentor', img: 'mentor', headScale: 1.1, headWeight: 600, heads: [[0.175, 0.203, 0.073, 0.145], [0.471, 0.151, 0.064, 0.145], [0.824, 0.221, 0.064, 0.156]],
-    ink: ['#C18E35', '#4b3a1c'],
+    ink: ['#C9A227', '#594919'],
     line: "He believed in people before they believed in themselves.",
     anchor: [0.422, 0.568],   // the detail the note's line points to
     story: ["Generations of leaders remember a conversation, a nudge, a door held open at exactly the right moment.", "His greatest work may be the people he shaped, many of whom now lead in their own right."] },
   { code: 'W', name: 'Global Leader', short: 'Global', img: 'global', headScale: 1.15, heads: [[0.27, 0.2, 0.1, 0.16], [0.69, 0.22, 0.095, 0.16]],
-    ink: ['#745EAC', '#332a42'],
+    ink: ['#3F72B5', '#233348'],
     line: "An Indian story, told to the world, one handshake at a time.",
     anchor: [0.53, 0.6],   // the detail the note's line points to
     story: ["Built on relationships and mutual respect, his reach extends across markets and cultures, always with India at its heart.", "Partners abroad speak of trust earned slowly and kept for decades."] },
   { code: 'H', name: 'Humanitarian', short: 'Humanitarian', img: 'humanitarian', heads: [[0.6, 0.17, 0.13, 0.11]],
-    ink: ['#0D9298', '#123b3c'],
+    ink: ['#D9822B', '#6b431c'],
     line: "Progress means little unless it lifts someone else.",
     anchor: [0.72, 0.68],   // the detail the note's line points to
     story: ["Education, health, opportunity and dignity: a quieter body of work, driven by the belief that business exists to serve society.", "Much of it happens far from cameras, in villages, classrooms and communities that rarely make the news."] },
   { code: 'J', name: 'Journey', short: 'Journey', img: 'journey', heads: [[0.32, 0.14, 0.14, 0.15]],
-    ink: ['#CB6440', '#4f2c1f'],
+    ink: ['#B23A3A', '#401d1c'],
     line: "Millions of miles travelled, and he is still riding.",
     anchor: [0.38, 0.56],   // the detail the note's line points to
     story: ["Milestones, memories and miles, measured not only in what was built but in everyone who came along for the ride.", "The journey is far from over, and the road ahead is still the one he looks at most."] }

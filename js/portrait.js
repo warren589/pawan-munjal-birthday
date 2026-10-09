@@ -17,7 +17,7 @@
   const toneOf = l => { const k = Math.min(1, Math.max(0, (0.88 - l) / 0.72)); return 0.07 + 0.93 * k * k * (3 - 2 * k); };
 
   function ramp(mid, dark) {
-    const m = hex(mid), d = hex(dark), floor = hex('#d6cbbd');
+    const m = hex(mid), d = hex(dark), floor = mix(hex('#d6cbbd'), m, 0.22);   // the lightest words keep a hint of their facet's colour
     const deep = mix(d, [12, 10, 9], 0.45);
     const stops = [[0, floor], [0.1, mix(floor, m, 0.5)], [0.28, m], [0.5, mix(m, d, 0.65)], [0.74, d], [1, deep]];
     return t => {
