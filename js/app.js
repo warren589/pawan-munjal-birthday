@@ -586,11 +586,45 @@
       words = [];
       for (let y = lh; y < SH + lh; y += lh) {
         let x = -R() * 60;
-        while (x < SW) { const t = pool[(R() * pool.length) | 0], w = fbx.measureText(t).width; fbx.globalAlpha = 0.055 + R() * 0.045; fbx.fillText(t, x, y); words.push({ t, x, y, w, fs }); x += w + fs * 0.55; }
+        while (x < SW) { const t = pool[(R() * pool.length) | 0], w = fbx.measureText(t).width; words.push({ t, x, y, w, fs, a: 0.055 + R() * 0.045 }); x += w + fs * 0.55; }
       }
-      fbx.globalAlpha = 1; ltx.setTransform(D, 0, 0, D, 0, 0); ltx.font = font; if ('letterSpacing' in ltx) ltx.letterSpacing = '0.4px';
-      glow = new Map(); paintLit();
+      ltx.setTransform(D, 0, 0, D, 0, 0); ltx.font = font; if ('letterSpacing' in ltx) ltx.letterSpacing = '0.4px';
+      glow = new Map(); drawFabric();
     }
+    // ---- nothing in the fabric may sit under foreground text: words touching any line of it are left out ----
+    const intro = $('.voices__intro'), meta = $('.voices__meta'), outro = $('.voices__outro');
+    let voiceRel = [], prevRel = null, blocked = new Set(), redrawT = 0;
+    function textRects(el) {
+      const out = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), rg = document.createRange(); let n;
+      while ((n = tw.nextNode())) { if (!n.textContent.trim()) continue; rg.selectNodeContents(n); for (const r of rg.getClientRects()) if (r.width > 0) out.push(r); }
+      return out;
+    }
+    // the voice's lines are measured once, untransformed, relative to the centre of its stack (it is centred there)
+    function captureVoice(el) {
+      const s = stack.getBoundingClientRect(), cx = s.left + s.width / 2, cy = s.top + s.height / 2;
+      if (voiceRel.length) { prevRel = voiceRel; clearTimeout(prevRel.t); prevRel.t = setTimeout(() => { prevRel = null; drawFabric(); }, 950); }   // the outgoing voice still fades
+      voiceRel = textRects(el).map(r => [r.left - cx, r.top - cy, r.right - cx, r.bottom - cy]);
+    }
+    function fgRects() {
+      const sr = stage.getBoundingClientRect(), out = [], add = r => out.push([r.left - sr.left, r.top - sr.top, r.right - sr.left, r.bottom - sr.top]);
+      const pulled = sec.classList.contains('pulled');
+      if (!sec.classList.contains('reading') || intro.dataset.fading) textRects(intro).forEach(add);
+      if (!pulled) {
+        textRects(meta).forEach(add);
+        const s = stack.getBoundingClientRect(), cx = s.left + s.width / 2 - sr.left, cy = s.top + s.height / 2 - sr.top;
+        [voiceRel, prevRel || []].forEach(rs => rs.forEach(([a, b, c, d]) => out.push([a + cx, b + cy, c + cx, d + cy])));
+      } else textRects(outro).forEach(add);
+      return out;
+    }
+    function drawFabric() {
+      if (!words.length) return;
+      const rs = fgRects(), pad = 5;
+      blocked = new Set(words.filter(w => { const x0 = w.x - pad, x1 = w.x + w.w + pad, y0 = w.y - w.fs * 0.8 - pad, y1 = w.y + w.fs * 0.15 + pad; return rs.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]); }));
+      fbx.clearRect(0, 0, SW, SH);
+      for (const w of words) { if (blocked.has(w)) continue; fbx.globalAlpha = w.a; fbx.fillText(w.t, w.x, w.y); }
+      fbx.globalAlpha = 1; paintLit();
+    }
+    const redrawSoon = (ms) => { clearTimeout(redrawT); redrawT = setTimeout(drawFabric, ms); };
     // the clear zone around the voice: words there never light up, and a soft veil keeps the fabric back from it
     const inZone = w => { const mob = MOBILE.matches, cx = SW / 2, cy = SH * 0.52, rx = SW * (mob ? 0.6 : 0.36), ry = SH * (mob ? 0.34 : 0.33); return ((w.x + w.w / 2 - cx) / rx) ** 2 + ((w.y - cy) / ry) ** 2 < 1; };
     // the instances of a message's words that light up: a few of each, away from the voice and the screen edges
@@ -604,7 +638,7 @@
     const inkOf = t => { const f = FACETS[CODES.indexOf(facetsOf(t.toLowerCase())[0])]; return f ? f.ink[0] : ACCENT; };
     function paintLit() {
       ltx.clearRect(0, 0, SW, SH);
-      glow.forEach((g, w) => { if (g.v < 0.01) return; ltx.globalAlpha = g.v * 0.9; ltx.fillStyle = inkOf(w.t); ltx.fillText(w.t, w.x, w.y); });
+      glow.forEach((g, w) => { if (g.v < 0.01 || blocked.has(w)) return; ltx.globalAlpha = g.v * 0.9; ltx.fillStyle = inkOf(w.t); ltx.fillText(w.t, w.x, w.y); });
       ltx.globalAlpha = 1;
     }
     // light a new set of words (and let the rest fade) over ~0.7s
@@ -638,6 +672,7 @@
       if (open >= 0 && els[open]) { els[open].classList.remove('open'); els[open].querySelector('.voice__q').setAttribute('aria-expanded', 'false'); els[open].querySelector('.voice__open').textContent = els[open].dataset.label; }
       open = k;
       if (k >= 0) { const e = els[k], b = e.querySelector('.voice__open'); e.dataset.label = b.textContent; e.classList.add('open'); e.querySelector('.voice__q').setAttribute('aria-expanded', 'true'); b.textContent = 'Close'; }
+      const e = els[k >= 0 ? k : active]; if (e && words.length) { prevRel = null; voiceRel = []; captureVoice(e); drawFabric(); }
     }
     stack.addEventListener('click', e => {
       const v = e.target.closest('.voice.on'); if (!v || !e.target.closest('.voice__q, .voice__open')) return;
@@ -657,6 +692,7 @@
       const src = set.slice().sort((a, b) => Math.hypot(a.x - SW / 2, a.y - SH / 2) - Math.hypot(b.x - SW / 2, b.y - SH / 2))[0];
       if (src && !REDUCED.matches) {
         el.classList.remove('out'); el.style.transition = 'none'; el.style.transform = ''; el.style.opacity = '0';
+        captureVoice(el); drawFabric();
         const sr = stage.getBoundingClientRect(), b = el.querySelector('blockquote').getBoundingClientRect(), e = el.getBoundingClientRect();
         const s = Math.max(0.06, Math.min(0.25, src.w / b.width));
         el.style.transform = `translate(${sr.left + src.x + src.w / 2 - (e.left + e.width / 2)}px, ${sr.top + src.y - (b.top + b.height / 2)}px) scale(${s})`;
@@ -665,7 +701,7 @@
           el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; el.classList.add('on');
           timers.push(setTimeout(() => el.classList.add('sign'), 650));
         }, 320));
-      } else { el.classList.add('on'); timers.push(setTimeout(() => el.classList.add('sign'), REDUCED.matches ? 0 : 400)); }
+      } else { el.classList.add('on'); captureVoice(el); drawFabric(); timers.push(setTimeout(() => el.classList.add('sign'), REDUCED.matches ? 0 : 400)); }
     }
 
     // ---- scroll drives everything ----
@@ -676,11 +712,16 @@
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
       const covered = r.top <= 0; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
       const u = -r.top / vh, n = seq.length;
-      sec.classList.toggle('reading', u > LEAD * 0.6);
+      const reading = u > LEAD * 0.6;
+      if (reading !== sec.classList.contains('reading')) {
+        sec.classList.toggle('reading', reading);
+        if (reading) { intro.dataset.fading = 1; setTimeout(() => { delete intro.dataset.fading; drawFabric(); }, 850); }
+        drawFabric();
+      }
       const pulled = u > LEAD + n * SEG + 0.1;
       sec.classList.toggle('pulled', pulled);
       if (pulled !== wasPulled) {
-        wasPulled = pulled;
+        wasPulled = pulled; drawFabric(); redrawSoon(1450);
         // in the pull-back every voice's words light up together: they all belong to the same fabric
         if (pulled) { setOpen(-1); lightUp(seq.flatMap(mi => litFor(mi))); } else { active = -1; }
       }
@@ -688,6 +729,7 @@
     }
     function build() { seq = sequence(); size(); buildVoices(); buildFabric(); built = true; active = -1; wasPulled = false; onScroll(); }
     // built straight away, so the section has its full height before anyone scrolls near it
+    stack.addEventListener('transitionend', e => { if (e.target === stack) drawFabric(); });
     build();
     document.fonts.ready.then(() => { buildFabric(); const k = active; active = -1; if (k >= 0) activate(k); });
     addEventListener('scroll', onScroll, { passive: true });
