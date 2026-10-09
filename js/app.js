@@ -548,17 +548,19 @@
   });
 
   // ---------------- the messages: a wall of letters that settles into a grid ----------------
-  // A sticky stage holds the letters, scattered in layers around the count. Scrolling on, every letter travels to its place
-  // in a masonry grid; then the stage lets go and the grid scrolls on with the page, its columns drifting at slightly
-  // different rates. The browser pins the stage itself (position: sticky), so nothing shakes against the screen; the
-  // script only works out how far each letter has travelled.
+  // A sticky stage holds the letters, scattered in layers around the count. Scrolling on, the letters travel to their
+  // places in a masonry grid; then the stage lets go and the grid scrolls on with the page, its columns drifting at
+  // slightly different rates. The browser pins the stage itself (position: sticky); the script only sets how far each
+  // letter has travelled. In the scattered view a long letter shows a shortened version in a complete card, which opens
+  // into the full letter as it settles. Only the letters that land near the top of the grid take part in the scatter;
+  // the rest simply fade in at their place, which keeps the number of moving cards small.
   const board = (() => {
     const sec = $('.wall'), pin = $('.wall__pin'), stage = $('.wall__stage'), cardsEl = $('.wall__cards'), head = $('.wall__head'), rest = $('.wall__rest');
     const HOLD = 0.4, MORPH = 1.0;            // viewport heights: scattered and held, then the move into the grid
-    let cards = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0;
+    let cards = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0, mob = false;
     const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
-    // every letter, in full: the short messages and the long letters, your own first
     function source() {
       const mine = messages.filter(m => m.mine).reverse();
       const short = messages.filter(m => !m.mine);
@@ -568,55 +570,60 @@
       return [...mine, ...out];
     }
     function cardHTML(m, deco) {
-      const paras = m.paras || [m.text];
+      const paras = m.paras || [m.text], sig = `<p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}`;
       return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ''}>
-        <div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>
-        ${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}
-        <p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}</div>
+        <div class="wcard__bg"></div>
+        <div class="wcard__full"><div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}${sig}</div></div>
+        <div class="wcard__short" aria-hidden="true"><div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p><p class="wcard__t clamp">${esc(paras[0])}</p>${sig}</div></div>
       </article>`;
     }
     function build() {
+      mob = MOBILE.matches;
       const items = source(), deco = [];   // a few letters only for the scattered view's depth; they fade as the grid forms
-      for (let i = 0; i < (MOBILE.matches ? 4 : 10); i++) deco.push(items[(i * 7 + 3) % items.length]);
+      for (let i = 0; i < (mob ? 0 : 6); i++) deco.push(items[(i * 7 + 3) % items.length]);
       cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('');
-      cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length }));
+      cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length, bg: el.querySelector('.wcard__bg'), full: el.querySelector('.wcard__full'), short: el.querySelector('.wcard__short') }));
       layout();
     }
 
     // ---- the two arrangements, in the stage's own coordinates ----
     function layout() {
-      vw = sec.clientWidth; vh = innerHeight; lastW = vw;
+      mob = MOBILE.matches; vw = sec.clientWidth; vh = innerHeight; lastW = vw;
       const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
-      const mob = MOBILE.matches, cols = mob ? (vw > 560 ? 2 : 1) : vw > 1500 ? 4 : vw > 980 ? 3 : 2;
+      const cols = mob ? (vw > 560 ? 2 : 1) : vw > 1500 ? 4 : vw > 980 ? 3 : 2;
       const gap = mob ? 18 : 40, maxW = cols * 380 + (cols - 1) * gap, side = Math.max(mob ? 18 : 56, (vw - maxW) / 2);
       const cw = Math.floor((vw - side * 2 - gap * (cols - 1)) / cols);
       stage.style.height = vh + 'px';
-      cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; c.el.style.clipPath = ''; });
-      // masonry: each letter to the shortest column
+      cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; });
       gTop = hdr + (mob ? 28 : 56);
       const colX = Array.from({ length: cols }, (_, k) => side + k * (cw + gap)), colH = colX.map(() => 0);
       const rates = [-0.05, 0.04, -0.03, 0.05];
-      cards.forEach(c => { c.h = c.el.offsetHeight; if (c.deco) return; const k = colH.indexOf(Math.min(...colH)); c.gx = colX[k]; c.gy = colH[k]; c.rate = cols > 1 ? rates[k % 4] : 0; colH[k] += c.h + gap; });
+      cards.forEach(c => {
+        c.h = c.el.offsetHeight; c.sh = Math.min(c.h, c.short.offsetHeight); c.long = c.h - c.sh > 4;
+        c.el.classList.toggle('is-long', c.long);
+        if (c.deco) return;
+        const k = colH.indexOf(Math.min(...colH)); c.gx = colX[k]; c.gy = colH[k]; c.rate = cols > 1 ? rates[k % 4] : 0; colH[k] += c.h + gap;
+      });
       const gridH = Math.max(...colH);
-      // the stage stays pinned through the scatter and the move; the grid then carries on below it
       pin.style.height = Math.round(vh * (HOLD + MORPH) + vh) + 'px';
       rest.style.height = Math.max(0, Math.round(gTop + gridH - vh + vh * 0.25)) + 'px';
-      // scattered: a few large letters in front around the count, the rest smaller behind, washed and out of focus;
-      // long letters are shown only down to a few lines here, and unfold as they reach the grid
-      const R = seeded(17), front = mob ? [[0.05, 0.11], [0.5, 0.09], [0.04, 0.72], [0.5, 0.76]]
+      // the scatter: a few large letters in front around the count, a handful smaller behind (desktop only), the
+      // decorative ones at the back; everything that lands further down the grid just fades in there
+      const R = seeded(17), front = mob ? [[0.04, 0.09], [0.5, 0.13], [0.06, 0.7], [0.48, 0.74]]
         : [[0.04, 0.1], [0.27, 0.07], [0.6, 0.08], [0.82, 0.14], [0.02, 0.48], [0.84, 0.5], [0.06, 0.78], [0.31, 0.8], [0.57, 0.8], [0.8, 0.82]];
-      const clipH = mob ? 210 : 250;
+      const midMax = mob ? 0 : 10;
       const clear = (x, y, w, h) => { const cx = vw / 2, cy = vh * 0.48, rx = vw * (mob ? 0.42 : 0.24), ry = vh * (mob ? 0.15 : 0.19); return Math.abs(x + w / 2 - cx) < rx + w / 2 && Math.abs(y + h / 2 - cy) < ry + h / 2; };
-      let f = 0;
+      let f = 0, mid = 0;
       cards.forEach((c, i) => {
-        const layer = c.deco ? 0 : f < front.length ? 2 : 1;
-        const sc = layer === 2 ? (mob ? 0.62 : 0.8) : layer === 1 ? (mob ? 0.45 : 0.56) : (mob ? 0.38 : 0.46);
-        c.cut = Math.max(0, c.h - clipH);
-        let x, y, t = 0;
+        let layer;
+        if (c.deco) layer = 0; else if (f < front.length) layer = 2; else if (mid < midMax && c.gy < vh * 1.4) { layer = 1; mid++; } else layer = -1;   // -1: no scatter
+        const sc = layer === 2 ? (mob ? 0.6 : 0.8) : layer === 1 ? 0.56 : 0.46;
+        let x = c.gx, y = gTop + (c.gy || 0), t = 0;
         if (layer === 2) { const [u, v] = front[f++]; x = u * vw; y = Math.max(hdr, v * vh); }
-        else do { x = -cw * 0.2 + R() * (vw + cw * 0.1 - cw * sc); y = hdr - 20 + R() * (vh - hdr - clipH * sc * 0.5); } while (t++ < 30 && clear(x, y, cw * sc, Math.min(c.h, clipH) * sc));
-        Object.assign(c, { sx: x, sy: y, ss: sc, layer, wash: [0.55, 0.35, 0][layer], blur: [2.6, 1.4, 0][layer], d: c.deco ? 0 : (i % 9) / 9 * 0.35 + (layer === 2 ? 0.15 : 0), bl: -1 });
-        c.el.style.zIndex = layer + 1;
+        else if (layer >= 0) do { x = -cw * 0.2 + R() * (vw + cw * 0.1 - cw * sc); y = hdr - 20 + R() * (vh - hdr - c.sh * sc); } while (t++ < 30 && clear(x, y, cw * sc, c.sh * sc));
+        Object.assign(c, { sx: x, sy: y, ss: layer < 0 ? 1 : sc, layer, wash: layer === 0 ? 0.5 : layer === 1 ? 0.32 : 0, blur: mob ? 0 : layer === 0 ? 2.4 : layer === 1 ? 1.2 : 0,
+          d: layer === 2 ? 0.15 + (i % 5) * 0.04 : layer === 1 ? (i % 7) / 7 * 0.3 : 0, k: -1 });
+        c.el.style.zIndex = Math.max(1, layer + 1);
       });
       draw();
     }
@@ -625,26 +632,30 @@
     function draw() {
       raf = 0;
       const r = sec.getBoundingClientRect(), s = -r.top;
-      const p = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH)));
+      const p = clamp01((s - vh * HOLD) / (vh * MORPH));
       const after = Math.max(0, s - vh * (HOLD + MORPH));   // scroll since the stage let go: drives the column drift
       for (const c of cards) {
-        if (c.deco) {
-          const a = 1 - Math.min(1, p * 2.2);
-          c.el.style.opacity = a; c.el.style.visibility = a <= 0.01 ? 'hidden' : '';
-          c.el.style.transform = `translate(${c.sx}px, ${c.sy - p * 30}px) scale(${c.ss})`;
-          if (c.bl < 0) { c.bl = c.blur; c.el.style.filter = `blur(${c.blur}px)`; c.el.style.setProperty('--wash', c.wash); c.el.style.clipPath = `inset(-40px -40px ${c.cut}px -40px round 8px)`; }
-          continue;
-        }
-        const e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(Math.min(1, Math.max(0, (p - c.d) / 0.5)));
-        const x = c.sx + (c.gx - c.sx) * e, y = c.sy + (gTop + c.gy - after * c.rate - c.sy) * e, sc = c.ss + (1 - c.ss) * e;
+        let e, a = 1;
+        if (c.deco) { e = 0; a = 1 - clamp01(p * 2.2); }
+        else if (c.layer < 0) { e = 1; a = clamp01((p - 0.45) / 0.45); }   // fades in at its place in the grid
+        else e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(clamp01((p - c.d) / 0.5));
+        const x = c.deco ? c.sx : c.sx + (c.gx - c.sx) * e;
+        const y = c.deco ? c.sy - p * 30 : c.layer < 0 ? gTop + c.gy - after * c.rate + (1 - a) * 24 : c.sy + (gTop + c.gy - after * c.rate - c.sy) * e;
+        const sc = c.ss + (1 - c.ss) * e;
         c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(4)})`;
-        const k = Math.round((1 - e) * 200) / 200;   // wash, blur and the folded part of long letters, in small steps
-        if (k !== c.k) {
-          c.k = k;
-          c.el.style.setProperty('--wash', (c.wash * k).toFixed(3));
-          const bl = Math.round(c.blur * k * 4) / 4; c.el.style.filter = bl ? `blur(${bl}px)` : '';
-          c.el.style.clipPath = c.cut * k > 0.5 ? `inset(-40px -40px ${(c.cut * k).toFixed(0)}px -40px round 8px)` : '';
-          c.el.style.zIndex = k ? c.layer + 1 : 1;
+        // the card itself opens from the shortened letter to the full one, in small steps
+        const k = Math.round(e * 100) / 100, ka = Math.round(a * 50) / 50;
+        if (k !== c.k || ka !== c.ka) {
+          c.k = k; c.ka = ka;
+          const vis = c.long ? c.sh + (c.h - c.sh) * k : c.h;
+          c.el.style.setProperty('--vis', vis.toFixed(0) + 'px');
+          // the shortened text leaves quickly and the full text arrives a moment later, so the two never sit on top of each other
+          c.el.style.setProperty('--open', c.long ? Math.min(1, Math.max(0, (k - 0.3) / 0.35)).toFixed(2) : 1);
+          c.el.style.setProperty('--short', c.long ? Math.max(0, 1 - k / 0.28).toFixed(2) : 0);
+          c.el.style.setProperty('--wash', (c.wash * (1 - k)).toFixed(3));
+          const bl = Math.round(c.blur * (1 - k) * 4) / 4; c.el.style.filter = bl ? `blur(${bl}px)` : '';
+          c.el.style.opacity = ka; c.el.style.visibility = ka <= 0.01 ? 'hidden' : '';
+          c.el.style.zIndex = k < 1 ? Math.max(1, c.layer + 1) : 1;
         }
       }
       head.style.opacity = 1 - Math.min(1, p * 2.4);
@@ -654,12 +665,10 @@
     }
     const tick = () => { if (!raf) raf = requestAnimationFrame(draw); };
     addEventListener('scroll', tick, { passive: true });
-    // re-arrange only when the width changes: a phone's address bar showing or hiding must not move anything
-    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (sec.clientWidth !== lastW) layout(); }, 200); });
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (sec.clientWidth !== lastW) build(); }, 200); });
     document.fonts.ready.then(layout);
 
     build();
-    // a newly written message joins the wall, first in the front row
     function added() { build(); }
     return { added };
   })();
