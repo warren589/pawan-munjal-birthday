@@ -77,7 +77,14 @@
 
     // spec: { key, img, heads:[[cx,cy,rx,ry]...]|null, ink:[mid,dark], words:[{t,m}], seed }
     // W x H is the box the portrait must fit; the portrait keeps its photograph's aspect and sits bottom-centre.
-    layout(spec, BW, BH, dpr) {
+    // Laying out a portrait is heavy (thousands of words), so it is written as a generator that pauses every few rows:
+    // layout() runs it straight through when a portrait is needed right now; prepare() lets the page run it in small
+    // slices in the background, so scrolling never stalls while the other portraits are made.
+    layout(spec, BW, BH, dpr) { const g = this.layoutGen(spec, BW, BH, dpr); let r; while (!(r = g.next()).done); return r.value; }
+    prepare(spec, BW, BH, dpr) { return this.layoutGen(spec, BW, BH, dpr); }
+    isReady(spec, BW, BH, dpr) { return this.cache.has(`${spec.key}|${BW}x${BH}@${dpr}`); }
+
+    *layoutGen(spec, BW, BH, dpr) {
       const ar = this.aspect(spec);
       let W = BW, H = BW / ar; if (H > BH) { H = BH; W = BH * ar; }
       W = Math.round(W); H = Math.round(H);
@@ -87,10 +94,11 @@
       const heads = spec.img ? (spec.heads || []) : [];
       const inHead = (u, v) => heads.some(h => ((u - h[0]) / h[2]) ** 2 + ((v - h[1]) / h[3]) ** 2 < 1);
       const cw = Math.round(W * dpr), chh = Math.round(H * dpr), R = rng(spec.seed || 7);
+      yield;   // the photograph's fields are decoded on first use; pause before the words begin
       const words = [], glyphs = [];   // glyphs: every word set, kept as a sprite for the shuffle between facets
 
       // two full layers, one per word size; the head ellipse decides which one shows where
-      const layer = (rows, region) => {
+      const layer = function* (rows, region) {
         const c = canvas(cw, chh), x = c.getContext('2d');
         x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
         const lh = H / rows, fs = lh * 1.2, space = fs * 0.28;
@@ -131,6 +139,7 @@
             }
             px += w + space;
           }
+          if (row % 6 === 5) yield;
         }
         return c;
       };
@@ -138,22 +147,23 @@
       const tex = canvas(cw, chh), tx = tex.getContext('2d');
       // word size follows the portrait's height so a wide group photo keeps the same type size as a tall one
       const bodyRows = Math.round(152 * H / BH), headRows = Math.round(224 * (spec.headScale || 1) * H / BH);   // group photos: finer words in their small faces
-      const body = layer(heads.length ? bodyRows : 160, 'body');
+      const body = yield* layer(heads.length ? bodyRows : 160, 'body');
       if (heads.length) {
-        const fine = layer(headRows, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
+        const fine = yield* layer(headRows, 'head'), fx = fine.getContext('2d'), bx = body.getContext('2d');
         const ell = (ctx, op) => {
           // feathered edge, so fine and body words blend instead of meeting at a hard line
           ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = op; ctx.fillStyle = '#000'; ctx.filter = `blur(${Math.round(4 * dpr)}px)`;
           ctx.beginPath(); heads.forEach(h => { ctx.moveTo(h[0] * cw + h[2] * cw, h[1] * chh); ctx.ellipse(h[0] * cw, h[1] * chh, h[2] * cw, h[3] * chh, 0, 0, Math.PI * 2); }); ctx.fill();
           ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
         };
-        ell(fx, 'destination-in'); ell(bx, 'destination-out');
+        ell(fx, 'destination-in'); yield; ell(bx, 'destination-out'); yield;
         tx.drawImage(body, 0, 0); tx.drawImage(fine, 0, 0);
       } else tx.drawImage(body, 0, 0);
 
       // colour every letter pixel from the tone-mapped photograph, then cut to the silhouette
-      tx.globalCompositeOperation = 'source-in'; tx.drawImage(this.paint(spec, src), 0, 0, cw, chh);
+      tx.globalCompositeOperation = 'source-in'; tx.drawImage(yield* this.paintGen(spec, src), 0, 0, cw, chh);
       // trim to the silhouette with an anti-aliased edge, so letters end along a clean contour
+      yield;
       tx.imageSmoothingQuality = 'high';
       tx.globalCompositeOperation = 'destination-in'; tx.drawImage(src.alpha, 0, 0, cw, chh);
       tx.globalCompositeOperation = 'source-over';
@@ -168,14 +178,17 @@
         tx.setTransform(1, 0, 0, 1, 0, 0);
       });
 
-      const scene = src.scene && !src.ghost ? this.sceneLayer(spec, src, W, H, BW, BH, dpr, R) : null;
+      yield;
+      const scene = src.scene && !src.ghost ? (yield* this.sceneLayer(spec, src, W, H, BW, BH, dpr, R)) : null;
+      yield;
       // a soft shadow on the paper, so the figure sits slightly above the page
       const shadow = canvas(cw, chh), sx = shadow.getContext('2d');
       sx.drawImage(src.shadow, 0, 0, cw, chh); sx.globalCompositeOperation = 'source-in';
       sx.fillStyle = spec.ink[1]; sx.fillRect(0, 0, cw, chh);
       // each travelling word is cut from the finished portrait along its own letters: same colour, shading and tilt
       // pixel for pixel, so the portrait can dissolve into its words without changing look, and nothing else rides along
-      this.cutGlyphs(glyphs, tex, dpr);
+      yield;
+      yield* this.cutGlyphs(glyphs, tex, dpr);
       const out = { key: spec.key, ink: spec.ink[1], tex, shadow, scene, words, glyphs, W, H, BW, BH, ox: Math.round((BW - W) / 2), oy: BH - H, dpr, slots: new Map(), used: new Set() };
       this.cache.set(ck, out);
       if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
@@ -184,7 +197,7 @@
 
     // The photograph's surroundings, also set in words: smaller, lighter and faded, so the subject stays in focus.
     // Covers the whole stage box; positioned relative to the subject the same way the original photo was.
-    sceneLayer(spec, src, W, H, BW, BH, dpr, R) {
+    *sceneLayer(spec, src, W, H, BW, BH, dpr, R) {
       const ox = Math.round((BW - W) / 2), oy = BH - H, b = src.sceneBox, S = sample(src.scene);
       const sx = ox + b.x * W, sy = oy + b.y * H, sw = b.w * W, sh = b.h * H;
       const cw = Math.round(BW * dpr), ch = Math.round(BH * dpr);
@@ -193,7 +206,8 @@
       const lh = Math.max(4, BH / 150), fs = lh * 1.15, space = fs * 0.3;
       const x0 = Math.max(0, sx), x1 = Math.min(BW, sx + sw), y0 = Math.max(0, sy), y1 = Math.min(BH, sy + sh);
       const widths = new Map();
-      for (let y = y0 + lh; y < y1 + lh; y += lh) {
+      for (let y = y0 + lh, row = 0; y < y1 + lh; y += lh, row++) {
+        if (row % 10 === 9) yield;
         let px = x0 - R() * fs * 5;
         while (px < x1) {
           const t = spec.words[(R() * spec.words.length) | 0].t.toUpperCase();
@@ -211,14 +225,16 @@
         const col = rmp(toneOf(src.scene.d[i]));
         id.data[i * 4] = col[0]; id.data[i * 4 + 1] = col[1]; id.data[i * 4 + 2] = col[2]; id.data[i * 4 + 3] = 255;
       }
-      pcx.putImageData(id, 0, 0);
+      pcx.putImageData(id, 0, 0); yield;
       x.globalCompositeOperation = 'source-in'; x.drawImage(pc, sx * dpr, sy * dpr, sw * dpr, sh * dpr);
       // keep it faint
       x.globalCompositeOperation = 'destination-in'; x.fillStyle = 'rgba(0,0,0,0.42)'; x.fillRect(0, 0, cw, ch);
       // clear a soft margin around the subject so the two never blur together
+      yield;
       x.globalCompositeOperation = 'destination-out';
       x.filter = `blur(${Math.round(10 * dpr)}px)`; x.drawImage(src.alpha, ox * dpr, oy * dpr, W * dpr, H * dpr); x.drawImage(src.alpha, ox * dpr, oy * dpr, W * dpr, H * dpr); x.filter = 'none';
       // and dissolve towards the edges of the scene and of the stage
+      yield;
       const fade = (gx0, gy0, gx1, gy1) => { const g = x.createLinearGradient(gx0, gy0, gx1, gy1); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, cw, ch); };
       const L0 = x0 * dpr, R0 = x1 * dpr, T0 = y0 * dpr, B0 = y1 * dpr, mX = (R0 - L0) * 0.22, mY = (B0 - T0) * 0.22;
       fade(L0, 0, L0 + mX, 0); fade(R0, 0, R0 - mX, 0); fade(0, T0, 0, T0 + mY); fade(0, B0, 0, B0 - mY * 0.25);
@@ -226,12 +242,14 @@
       return c;
     }
 
-    paint(spec, src) {
+    paint(spec, src) { const g = this.paintGen(spec, src); let r; while (!(r = g.next()).done); return r.value; }
+    *paintGen(spec, src) {
       const key = 'paint|' + spec.key; if (this.cache.has(key)) return this.cache.get(key);
       const f = src.lum, c = canvas(f.w, f.h), x = c.getContext('2d'), id = x.createImageData(f.w, f.h);
       const inks = spec.inks || [spec.ink];
       const ramps = inks.map(i => ramp(i[0], i[1]));
       for (let i = 0; i < f.d.length; i++) {
+        if (i % 60000 === 59999) yield;
         let t = toneOf(f.d[i]); if (src.ghost) t = 0.05 + t * 0.35;
         // depth: a soft rim of shade where the figure turns away, so the flat photo reads as a rounded form
         const dep = src.depth.d[i]; t = Math.min(1, t + 0.2 * Math.pow(1 - dep, 2) - 0.05 * dep);
@@ -298,10 +316,12 @@
 
     // e: 0 → portrait A, 1 → portrait B. Each word travels to its partner's place and becomes that word on the way.
     // Each distinct word (text + weight + size) drawn once, in black, into shared sheets; the shuffle copies from these.
-    cutGlyphs(glyphs, tex, dpr) {
+    *cutGlyphs(glyphs, tex, dpr) {
       const S = 1024, pad = 1, pages = [];
       let pg = null, x = 0, y = 0, row = 0;
+      let gi = 0;
       for (const g of glyphs) {
+        if (++gi % 40 === 0) yield;
         // whole device pixels throughout, so the cut copies the texture exactly instead of resampling (and fading) it
         const sx0 = Math.floor((g.x - pad) * dpr), sy0 = Math.floor((g.y - pad) * dpr);
         const sw = Math.ceil((g.x + g.w + pad) * dpr) - sx0, sh = Math.ceil((g.y + g.h + pad) * dpr) - sy0;

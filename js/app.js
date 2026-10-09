@@ -249,12 +249,39 @@
   }
 
   // warm every portrait in idle time so scrolling never waits on layout
+  // ---- preparing portraits without ever blocking the page ----
+  // Each job is a portrait (laid out in slices, see WordPortraits.prepare) or the pairing of two neighbours' words for the
+  // shuffle. run() works through jobs a few milliseconds at a time, so the page keeps scrolling smoothly meanwhile.
   let warmGen = 0;
-  function warm() {
-    const gen = ++warmGen, q = STATES.slice(), idle = window.requestIdleCallback || (cb => setTimeout(cb, 40));
-    const step = () => { if (gen !== warmGen || !q.length) return; layoutFor(q.shift()); idle(step, { timeout: 300 }); };
-    idle(step, { timeout: 300 });
+  function jobsFor(states) {
+    const jobs = [];
+    states.forEach((st, i) => {
+      jobs.push({ gen: () => wp.isReady(spec(st), W, H, dpr) ? null : wp.prepare(spec(st), W, H, dpr) });
+      const k = STATES.indexOf(st);
+      if (k > 0) jobs.push({ fn: () => wp.pairs(layoutFor(STATES[k - 1]), layoutFor(st)) });
+    });
+    return jobs;
   }
+  function run(jobs, budget, onStep) {
+    const gen = warmGen;
+    return new Promise(done => {
+      let j = 0, it = null;
+      const step = () => {
+        if (gen !== warmGen) return done(false);
+        const t0 = performance.now();
+        while (j < jobs.length && performance.now() - t0 < budget) {
+          const job = jobs[j];
+          if (job.fn) { job.fn(); j++; onStep && onStep(j, jobs.length); continue; }
+          if (!it) { it = job.gen(); if (!it) { j++; onStep && onStep(j, jobs.length); continue; } }
+          if (it.next().done) { it = null; j++; onStep && onStep(j, jobs.length); }
+        }
+        if (j < jobs.length) (budget > 20 ? setTimeout(step, 0) : requestAnimationFrame(step)); else done(true);
+      };
+      step();
+    });
+  }
+  // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
+  function warm() { warmGen++; run(jobsFor(STATES), 7); }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
@@ -517,7 +544,7 @@
     function source() {
       const mine = messages.filter(m => m.mine).reverse();
       const short = messages.filter(m => !m.mine);
-      const long = letters.map(l => ({ name: l.name, rel: l.rel, paras: l.paras, img: l.img }));
+      const long = letters.map(l => ({ name: l.name, rel: l.rel, paras: l.paras }));
       const out = [], a = short.slice(), b = long.slice();
       while (a.length || b.length) { if (a.length) out.push(a.shift()); if (a.length) out.push(a.shift()); if (b.length) out.push(b.shift()); }
       return [...mine, ...out];
@@ -525,7 +552,6 @@
     function cardHTML(m, deco) {
       const paras = m.paras || [m.text];
       return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ''}>
-        ${m.img ? `<img class="wcard__img" src="${m.img.src}" alt="" style="aspect-ratio:${m.img.w}/${m.img.h}" loading="eager" decoding="async">` : ''}
         <div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>
         ${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}
         <p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}</div>
@@ -613,7 +639,6 @@
     // re-arrange only when the width changes: a phone's address bar showing or hiding must not move anything
     let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (sec.clientWidth !== lastW) layout(); }, 200); });
     document.fonts.ready.then(layout);
-    cardsEl.addEventListener('load', e => { if (e.target.tagName === 'IMG') { clearTimeout(rt); rt = setTimeout(layout, 120); } }, true);
 
     build();
     // a newly written message joins the wall, first in the front row
@@ -627,8 +652,14 @@
       new Promise(r => setTimeout(r, 2500))]);
     await wp.init(window.PORTRAITS);
     geometry();
-    layoutFor(blend().a);
-    ready = true; body.classList.add('ready'); kick();
-    setTimeout(warm, 300);
+    // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
+    // the shuffles between them); the rest is prepared in the background once the page is open
+    const bar = $('.loader__bar i'), first = [...new Set([blend().a, blend().b, 'hero', '0', '1'])];
+    await run(jobsFor(first), 40, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
+    ready = true; kick();
+    await new Promise(r => setTimeout(r, 250));
+    body.classList.add('ready'); body.classList.remove('booting'); kick();
+    setTimeout(() => { const l = $('.loader'); if (l) l.remove(); }, 900);
+    setTimeout(warm, 400);
   })();
 })();
