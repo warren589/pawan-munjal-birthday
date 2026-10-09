@@ -560,182 +560,120 @@
   renderLetters();
   new IntersectionObserver(es => es.forEach(e => body.classList.toggle('on-letters', e.isIntersecting)), { rootMargin: '-40% 0px 0px 0px' }).observe($('.letters'));
 
-  // ---------------- the messages: one voice emerging from thousands ----------------
-  // A sticky stage over a quiet fabric of words, set like the portraits. Scrolling brings a few voices forward: each
-  // one's words light up in the fabric in their facet's ink, and the message grows out of one of them. Then the view
-  // pulls back, the fabric opens up, and the list of every message follows.
+  // ---------------- the messages: a wall of letters that settles into a grid ----------------
+  // The section opens on letters scattered in layers around the count, held in place for a moment. Scrolling on, every
+  // letter travels to its place in a masonry grid; the decorative ones at the back fade away. Once settled, the grid's
+  // columns drift at slightly different speeds as you scroll (a quiet parallax). No sticky positioning: each card's
+  // place is worked out from the scroll position, in the section's own coordinates.
   const board = (() => {
-    const sec = $('.voices'), stage = $('.voices__stage'), fab = $('.voices__fabric'), fbx = fab.getContext('2d'), lit = $('.voices__lit'), ltx = lit.getContext('2d');
-    const stack = $('.voices__stack'), nEl = $('.voices__n'), bar = $('.voices__bar');
-    const SEG = 0.9, LEAD = 0.25;            // viewport heights of scroll per voice; a little scroll before the first one changes
-    const PICK = [0, 4, 12, 5];              // four voices: a colleague, family, the shop floor, a partner abroad
-    let seq = [], els = [], active = -1, timers = [], built = false, open = -1;
-    let words = [], SW = 0, SH = 0, D = 1, glow = new Map(), raf = 0;   // fabric words, and how lit each one is (0–1)
-    const pad = n => String(n).padStart(2, '0');
-    const clip = (t, max) => { if (t.length <= max) return t; const c = t.slice(0, max); return c.slice(0, c.lastIndexOf(' ')).replace(/[,.;:—-]+$/, '') + '…'; };
-    const sequence = () => [...messages.map((m, i) => i).filter(i => messages[i].mine).reverse(), ...PICK.filter(i => i < messages.length)];
+    const sec = $('.wall'), cardsEl = $('.wall__cards'), head = $('.wall__head');
+    const HOLD = 0.45, MORPH = 1.1;           // viewport heights: scattered and pinned, then the move into the grid
+    let cards = [], items = [], vw = 0, vh = 0, gridTop = 0, colX = [], colH = [], cw = 0, raf = 0, hdr = 64;
+    const R0 = seeded(91);
+    const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const dot = m => { const c = [...(m.facets || [])][0], f = FACETS[CODES.indexOf(c)]; return f ? f.ink[0] : 'transparent'; };
 
-    // ---- the fabric: rows of small capitals, the portraits' own texture, very faint ----
-    function buildFabric() {
-      const r = stage.getBoundingClientRect(); SW = r.width; SH = r.height; D = Math.min(2, devicePixelRatio || 1);
-      for (const c of [fab, lit]) { c.width = Math.round(SW * D); c.height = Math.round(SH * D); }
-      const mob = MOBILE.matches, fs = mob ? 7.6 : 9.2, lh = fs * 1.42, R = seeded(23), font = `600 ${fs}px ${window.WP_FONT}`;
-      const pool = []; messages.forEach(m => m.words.forEach(w => pool.push(w.toUpperCase()))); VOCAB.forEach(v => pool.push(v.w.toUpperCase()));
-      fbx.setTransform(D, 0, 0, D, 0, 0); fbx.clearRect(0, 0, SW, SH); fbx.font = font; fbx.fillStyle = '#1d1a17'; fbx.textBaseline = 'alphabetic';
-      if ('letterSpacing' in fbx) fbx.letterSpacing = '0.4px';
-      words = [];
-      for (let y = lh; y < SH + lh; y += lh) {
-        let x = -R() * 60;
-        while (x < SW) { const t = pool[(R() * pool.length) | 0], w = fbx.measureText(t).width; words.push({ t, x, y, w, fs, a: 0.055 + R() * 0.045 }); x += w + fs * 0.55; }
-      }
-      ltx.setTransform(D, 0, 0, D, 0, 0); ltx.font = font; if ('letterSpacing' in ltx) ltx.letterSpacing = '0.4px';
-      glow = new Map(); drawFabric();
+    // every letter: the short messages and the long letters (as their opening paragraph)
+    function source() {
+      const mine = messages.filter(m => m.mine).reverse().map(m => ({ ...m, text: m.text }));
+      const short = messages.filter(m => !m.mine);
+      const long = letters.map(l => ({ name: l.name, rel: l.rel, text: l.paras[0], more: l.paras.slice(1), facets: new Set(l.facets) }));
+      const out = [], a = short.slice(), b = long.slice();
+      while (a.length || b.length) { if (a.length) out.push(a.shift()); if (a.length) out.push(a.shift()); if (b.length) out.push(b.shift()); }
+      return [...mine, ...out];
     }
-    // ---- nothing in the fabric may sit under foreground text: words touching any line of it are left out ----
-    const intro = $('.voices__intro'), meta = $('.voices__meta'), outro = $('.voices__outro');
-    let voiceRel = [], prevRel = null, blocked = new Set(), redrawT = 0;
-    function textRects(el) {
-      const out = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), rg = document.createRange(); let n;
-      while ((n = tw.nextNode())) { if (!n.textContent.trim()) continue; rg.selectNodeContents(n); for (const r of rg.getClientRects()) if (r.width > 0) out.push(r); }
-      return out;
+    function cardHTML(m, deco) {
+      return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ' tabindex="0"'}>
+        <i class="wcard__dot" style="background:${dot(m)}"></i>
+        <p class="wcard__to">Dear Dr. Munjal,</p>
+        <p class="wcard__t">${esc(m.text)}</p>${m.more ? `<div class="wcard__more">${m.more.map(p => `<p>${esc(p)}</p>`).join('')}</div>` : ''}
+        <p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}
+      </article>`;
     }
-    // the voice's lines are measured once, untransformed, relative to the centre of its stack (it is centred there)
-    function captureVoice(el) {
-      const s = stack.getBoundingClientRect(), cx = s.left + s.width / 2, cy = s.top + s.height / 2;
-      if (voiceRel.length) { prevRel = voiceRel; clearTimeout(prevRel.t); prevRel.t = setTimeout(() => { prevRel = null; drawFabric(); }, 950); }   // the outgoing voice still fades
-      voiceRel = textRects(el).map(r => [r.left - cx, r.top - cy, r.right - cx, r.bottom - cy]);
-    }
-    function fgRects() {
-      const sr = stage.getBoundingClientRect(), out = [], add = r => out.push([r.left - sr.left, r.top - sr.top, r.right - sr.left, r.bottom - sr.top]);
-      const pulled = sec.classList.contains('pulled');
-      if (!sec.classList.contains('reading') || intro.dataset.fading) textRects(intro).forEach(add);
-      if (!pulled) {
-        textRects(meta).forEach(add);
-        const s = stack.getBoundingClientRect(), cx = s.left + s.width / 2 - sr.left, cy = s.top + s.height / 2 - sr.top;
-        [voiceRel, prevRel || []].forEach(rs => rs.forEach(([a, b, c, d]) => out.push([a + cx, b + cy, c + cx, d + cy])));
-      } else textRects(outro).forEach(add);
-      return out;
-    }
-    function drawFabric() {
-      if (!words.length) return;
-      const rs = fgRects(), pad = 5;
-      blocked = new Set(words.filter(w => { const x0 = w.x - pad, x1 = w.x + w.w + pad, y0 = w.y - w.fs * 0.8 - pad, y1 = w.y + w.fs * 0.15 + pad; return rs.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]); }));
-      fbx.clearRect(0, 0, SW, SH);
-      for (const w of words) { if (blocked.has(w)) continue; fbx.globalAlpha = w.a; fbx.fillText(w.t, w.x, w.y); }
-      fbx.globalAlpha = 1; paintLit();
-    }
-    const redrawSoon = (ms) => { clearTimeout(redrawT); redrawT = setTimeout(drawFabric, ms); };
-    // the clear zone around the voice: words there never light up, and a soft veil keeps the fabric back from it
-    const inZone = w => { const mob = MOBILE.matches, cx = SW / 2, cy = SH * 0.52, rx = SW * (mob ? 0.6 : 0.36), ry = SH * (mob ? 0.34 : 0.33); return ((w.x + w.w / 2 - cx) / rx) ** 2 + ((w.y - cy) / ry) ** 2 < 1; };
-    // the instances of a message's words that light up: a few of each, away from the voice and the screen edges
-    function litFor(mi) {
-      const out = [], want = new Set(messages[mi].words.map(w => w.toUpperCase())), per = new Map(), R = seeded(mi * 13 + 5);
-      const cand = words.filter(w => want.has(w.t) && !inZone(w) && w.x > 12 && w.x + w.w < SW - 12 && w.y > 80 && w.y < SH - 50);
-      for (let i = cand.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [cand[i], cand[j]] = [cand[j], cand[i]]; }
-      for (const w of cand) { const n = per.get(w.t) || 0; if (n < 2) { per.set(w.t, n + 1); out.push(w); } }
-      return out;
-    }
-    const inkOf = t => { const f = FACETS[CODES.indexOf(facetsOf(t.toLowerCase())[0])]; return f ? f.ink[0] : ACCENT; };
-    function paintLit() {
-      ltx.clearRect(0, 0, SW, SH);
-      glow.forEach((g, w) => { if (g.v < 0.01 || blocked.has(w)) return; ltx.globalAlpha = g.v * 0.9; ltx.fillStyle = inkOf(w.t); ltx.fillText(w.t, w.x, w.y); });
-      ltx.globalAlpha = 1;
-    }
-    // light a new set of words (and let the rest fade) over ~0.7s
-    function lightUp(set) {
-      const on = new Set(set);
-      words.forEach(w => { if (on.has(w) && !glow.has(w)) glow.set(w, { v: 0, to: 1 }); });
-      glow.forEach((g, w) => { g.to = on.has(w) ? 1 : 0; });
-      cancelAnimationFrame(raf);
-      const step = () => {
-        let busy = false;
-        glow.forEach((g, w) => { const d = g.to - g.v; if (Math.abs(d) > 0.01) { g.v += d * 0.12; busy = true; } else { g.v = g.to; if (!g.to) glow.delete(w); } });
-        paintLit(); if (busy) raf = requestAnimationFrame(step);
-      };
-      raf = requestAnimationFrame(step);
+    function build() {
+      items = source();
+      const deco = [];   // letters at the back of the scattered view only, for density; they fade as the grid forms
+      for (let i = 0; i < (MOBILE.matches ? 14 : 34); i++) deco.push(items[(i * 7 + 3) % items.length]);
+      cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('');
+      cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length }));
+      layout();
     }
 
-    // ---- the voices: a shortened version, and the full letter that opens in place ----
-    function buildVoices() {
-      const max = MOBILE.matches ? 120 : 150;
-      stack.innerHTML = seq.map((mi, k) => {
-        const m = messages[mi], t = clip(m.text, max), cut = t !== m.text, codes = [...m.facets];
-        return `<figure class="voice" data-k="${k}">
-          <button class="voice__q" type="button" aria-expanded="false"><blockquote><span class="short">“${esc(t)}”</span><span class="full">“${marked(m)}”</span></blockquote></button>
-          <figcaption><cite>${esc(m.name || 'Anonymous')}<span>${esc(m.rel || '')}${m.mine ? ' · <em>Pending approval, visible only to you</em>' : ''}</span></cite>
-            <p class="voice__facets">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
-            <button class="link voice__open" type="button">${cut ? 'Read the full letter' : 'Read the letter'}</button></figcaption></figure>`;
-      }).join('');
-      els = $$('.voice', stack);
-    }
-    function setOpen(k) {
-      if (open >= 0 && els[open]) { els[open].classList.remove('open'); els[open].querySelector('.voice__q').setAttribute('aria-expanded', 'false'); els[open].querySelector('.voice__open').textContent = els[open].dataset.label; }
-      open = k;
-      if (k >= 0) { const e = els[k], b = e.querySelector('.voice__open'); e.dataset.label = b.textContent; e.classList.add('open'); e.querySelector('.voice__q').setAttribute('aria-expanded', 'true'); b.textContent = 'Close'; }
-      const e = els[k >= 0 ? k : active]; if (e && words.length) { prevRel = null; voiceRel = []; captureVoice(e); drawFabric(); }
-    }
-    stack.addEventListener('click', e => {
-      const v = e.target.closest('.voice.on'); if (!v || !e.target.closest('.voice__q, .voice__open')) return;
-      const k = +v.dataset.k; setOpen(open === k ? -1 : k);
-    });
-
-    // ---- one voice emerging: its words light up around the edges, then it grows out of one of them ----
-    function activate(k) {
-      if (k === active) return;
-      timers.forEach(clearTimeout); timers = []; setOpen(-1);
-      active = k;
-      els.forEach((e, j) => { if (j !== k && e.classList.contains('on')) { e.classList.remove('on', 'sign'); e.classList.add('out'); timers.push(setTimeout(() => e.classList.remove('out'), 900)); } });
-      nEl.textContent = pad(k + 1); bar.style.setProperty('--p', (k + 1) / seq.length);
-      const el = els[k]; if (!el) return;
-      const set = litFor(seq[k]); lightUp(set);
-      // grow out of the lit word nearest the centre, so the trip is short and readable
-      const src = set.slice().sort((a, b) => Math.hypot(a.x - SW / 2, a.y - SH / 2) - Math.hypot(b.x - SW / 2, b.y - SH / 2))[0];
-      if (src && !REDUCED.matches) {
-        el.classList.remove('out'); el.style.transition = 'none'; el.style.transform = ''; el.style.opacity = '0';
-        captureVoice(el); drawFabric();
-        const sr = stage.getBoundingClientRect(), b = el.querySelector('blockquote').getBoundingClientRect(), e = el.getBoundingClientRect();
-        const s = Math.max(0.06, Math.min(0.25, src.w / b.width));
-        el.style.transform = `translate(${sr.left + src.x + src.w / 2 - (e.left + e.width / 2)}px, ${sr.top + src.y - (b.top + b.height / 2)}px) scale(${s})`;
-        void el.offsetWidth;
-        timers.push(setTimeout(() => {   // a moment for the lit words to catch the eye, then the voice grows into the centre
-          el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; el.classList.add('on');
-          timers.push(setTimeout(() => el.classList.add('sign'), 650));
-        }, 320));
-      } else { el.classList.add('on'); captureVoice(el); drawFabric(); timers.push(setTimeout(() => el.classList.add('sign'), REDUCED.matches ? 0 : 400)); }
+    // ---- the two arrangements ----
+    function layout() {
+      vw = sec.clientWidth; vh = innerHeight; hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
+      const mob = MOBILE.matches, gap = mob ? 14 : 22, cols = mob ? 2 : vw > 1500 ? 5 : vw > 1100 ? 4 : 3, pad = mob ? 14 : 48;
+      cw = Math.floor((vw - pad * 2 - gap * (cols - 1)) / cols);
+      cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; });
+      gridTop = vh * (HOLD + MORPH) + hdr + (mob ? 24 : 40);
+      // masonry: each letter goes to the shortest column
+      colX = Array.from({ length: cols }, (_, k) => pad + k * (cw + gap)); colH = colX.map(() => 0);
+      cards.forEach(c => { c.h = c.el.offsetHeight; if (c.deco) return; const k = colH.indexOf(Math.min(...colH)); c.col = k; c.gx = colX[k]; c.gy = colH[k]; colH[k] += c.h + gap; });
+      // each column drifts at its own small rate once the grid has formed
+      const rates = mob ? [-0.05, 0.05] : [-0.07, 0.04, -0.02, 0.06, -0.04];
+      cards.forEach(c => { c.rate = c.deco ? 0 : rates[c.col % rates.length]; });
+      sec.style.height = Math.round(gridTop + Math.max(...colH) + vh * 0.35) + 'px';
+      // scattered: a few large letters in front around the count, the rest smaller behind, the decorative ones at the back
+      const R = seeded(17), front = mob ? [[0.04, 0.12], [0.52, 0.1], [0.06, 0.74], [0.5, 0.78]]
+        : [[0.04, 0.1], [0.27, 0.07], [0.6, 0.08], [0.82, 0.16], [0.02, 0.46], [0.84, 0.5], [0.06, 0.78], [0.3, 0.8], [0.56, 0.8], [0.8, 0.82]];
+      const clear = (x, y, w, h) => { const cx = vw / 2, cy = vh * 0.48, rx = vw * (mob ? 0.42 : 0.24), ry = vh * (mob ? 0.16 : 0.2); return Math.abs(x + w / 2 - cx) < rx + w / 2 && Math.abs(y + h / 2 - cy) < ry + h / 2; };
+      let f = 0;
+      cards.forEach((c, i) => {
+        const layer = c.deco ? 0 : f < front.length ? 2 : 1;
+        const sc = layer === 2 ? (mob ? 0.72 : 0.88) : layer === 1 ? (mob ? 0.5 : 0.62) : (mob ? 0.42 : 0.5);
+        let x, y, tries = 0;
+        if (layer === 2) { const [u, v] = front[f++]; x = u * vw; y = Math.max(hdr, v * vh); }
+        else do { x = -cw * 0.2 + R() * (vw + cw * 0.1); y = hdr - 20 + R() * (vh - hdr); } while (tries++ < 30 && clear(x, y, cw * sc, c.h * sc));
+        c.sx = x; c.sy = y; c.ss = sc; c.layer = layer; c.el.style.zIndex = layer + 1;
+        c.wash = layer === 2 ? 0 : layer === 1 ? 0.35 : 0.62;   // farther letters washed towards the paper, never see-through
+      });
+      draw();
     }
 
-    // ---- scroll drives everything ----
-    function size() { sec.style.height = Math.round(innerHeight * (LEAD + seq.length * SEG + 1.4) + innerHeight) + 'px'; }
-    let wasPulled = false;
-    function onScroll() {
-      const r = sec.getBoundingClientRect(), vh = innerHeight;
+    // ---- every frame: where each letter is between the two arrangements ----
+    function draw() {
+      raf = 0;
+      const r = sec.getBoundingClientRect(), s = -r.top;   // how far into the section we have scrolled
+      const p = Math.min(1, Math.max(0, (s - vh * HOLD) / (vh * MORPH)));
+      const pinned = Math.min(Math.max(s, 0), vh * (HOLD + MORPH));   // the scattered view rides along with the screen
+      const after = Math.max(0, s - vh * (HOLD + MORPH));
+      cards.forEach((c, i) => {
+        // the grid forms on screen, then scrolls on with the page; letters set off one after another, front ones last, so the scatter unravels rather than snapping
+        const d = c.deco ? 0 : (i % 9) / 9 * 0.35 + (c.layer === 2 ? 0.15 : 0), e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(Math.min(1, Math.max(0, (p - d) / (1 - 0.5))));
+        if (c.deco) {
+          const a = 1 - Math.min(1, p * 2.2);
+          c.el.style.opacity = a; c.el.style.visibility = a <= 0.01 ? 'hidden' : '';
+          c.el.style.transform = `translate(${c.sx}px, ${pinned + c.sy - p * 40}px) scale(${c.ss})`;
+          return;
+        }
+        const x = c.sx + (c.gx - c.sx) * e, y = pinned + c.sy + (pinned + gridTop - vh * (HOLD + MORPH) + c.gy - after * c.rate - (pinned + c.sy)) * e, sc = c.ss + (1 - c.ss) * e;
+        c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+        c.el.style.setProperty('--wash', (c.wash * (1 - e)).toFixed(3));
+        if (e >= 1 && c.el.style.zIndex !== '1') c.el.style.zIndex = 1; else if (e < 1 && c.el.style.zIndex !== String(c.layer + 1)) c.el.style.zIndex = c.layer + 1;
+      });
+      // the count stays in the middle of the scatter, then steps aside as the letters arrive
+      head.style.transform = `translateY(${pinned}px)`;
+      head.style.opacity = 1 - Math.min(1, p * 2.4);
+      head.style.visibility = p > 0.45 ? 'hidden' : '';
+      sec.classList.toggle('settled', p >= 1);
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
-      const covered = r.top <= 0; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
-      const u = -r.top / vh, n = seq.length;
-      const reading = u > LEAD * 0.6;
-      if (reading !== sec.classList.contains('reading')) {
-        sec.classList.toggle('reading', reading);
-        if (reading) { intro.dataset.fading = 1; setTimeout(() => { delete intro.dataset.fading; drawFabric(); }, 850); }
-        drawFabric();
-      }
-      const pulled = u > LEAD + n * SEG + 0.1;
-      sec.classList.toggle('pulled', pulled);
-      if (pulled !== wasPulled) {
-        wasPulled = pulled; drawFabric(); redrawSoon(1450);
-        // in the pull-back every voice's words light up together: they all belong to the same fabric
-        if (pulled) { setOpen(-1); lightUp(seq.flatMap(mi => litFor(mi))); } else { active = -1; }
-      }
-      if (!pulled) activate(Math.max(0, Math.min(n - 1, Math.floor((u - LEAD) / SEG))));
+      const covered = r.top <= 0 && r.bottom >= vh; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
     }
-    function build() { seq = sequence(); size(); buildVoices(); buildFabric(); built = true; active = -1; wasPulled = false; onScroll(); }
-    // built straight away, so the section has its full height before anyone scrolls near it
-    stack.addEventListener('transitionend', e => { if (e.target === stack) drawFabric(); });
+    const tick = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    addEventListener('scroll', tick, { passive: true });
+    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(layout, 200); });
+    document.fonts.ready.then(layout);
+
+    // a letter opens in place once the grid has formed; the columns re-flow around it
+    cardsEl.addEventListener('click', e => {
+      const el = e.target.closest('.wcard:not(.deco)'); if (!el || !sec.classList.contains('settled')) return;
+      el.classList.toggle('open'); layout();
+    });
+    cardsEl.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.wcard:not(.deco)')) { e.preventDefault(); e.target.click(); } });
+
     build();
-    document.fonts.ready.then(() => { buildFabric(); const k = active; active = -1; if (k >= 0) activate(k); });
-    addEventListener('scroll', onScroll, { passive: true });
-    let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { size(); buildFabric(); const k = active; active = -1; els.forEach(e => e.classList.remove('on', 'sign', 'out')); if (k >= 0) activate(k); }, 200); });
-    // a newly written message becomes the first voice
-    function added() { if (built) build(); }
+    // a newly written message joins the wall, first in the front row
+    function added() { build(); }
     return { added };
   })();
 
