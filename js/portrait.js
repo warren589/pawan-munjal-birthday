@@ -37,8 +37,6 @@
     for (let i = 0; i < out.length; i++) out[i] = d[i * 4 + ch] / 255;
     return { w: c.width, h: c.height, d: out, img: c };
   }
-  // the photograph's own colours, for a portrait whose words keep them (a painting)
-  function rgbOf(img) { const c = canvas(img.width, img.height), x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; }
   // a real alpha mask (the PNG itself is opaque), so trimming leaves a clean anti-aliased contour
   function alphaOf(f, blur = 0) {
     const c = canvas(f.w, f.h), x = c.getContext('2d'), id = x.createImageData(f.w, f.h);
@@ -56,8 +54,8 @@
       // decode every photograph in parallel; the heavier per-pixel preparation happens on first use
       this.raw = {};
       await Promise.all(Object.entries(portraits).map(async ([k, v]) => {
-        const [lum, mask, scene, col] = await Promise.all([load(v.lum), load(v.mask), v.scene ? load(v.scene.src) : null, v.col ? load(v.col) : null]);
-        this.raw[k] = { lum, mask, aspect: lum.width / lum.height, scene, sceneBox: v.scene, col };
+        const [lum, mask, scene] = await Promise.all([load(v.lum), load(v.mask), v.scene ? load(v.scene.src) : null]);
+        this.raw[k] = { lum, mask, aspect: lum.width / lum.height, scene, sceneBox: v.scene };
       }));
     }
 
@@ -74,7 +72,7 @@
         return (this.src.ghost = { ...s, lum: field(gl), ghost: true });
       }
       const r = this.raw[k], m = field(r.mask, 0);
-      return (this.src[k] = { scene: r.scene ? field(r.scene) : null, sceneBox: r.sceneBox, lum: field(r.lum), mask: m, depth: field(r.mask, 1), col: r.col ? rgbOf(r.col) : null, alpha: alphaOf(m), shadow: alphaOf(m, Math.round(m.w / 70)), aspect: r.aspect });
+      return (this.src[k] = { scene: r.scene ? field(r.scene) : null, sceneBox: r.sceneBox, lum: field(r.lum), mask: m, depth: field(r.mask, 1), alpha: alphaOf(m), shadow: alphaOf(m, Math.round(m.w / 70)), aspect: r.aspect });
     }
 
     aspect(spec) { return this.raw[spec.img || 'studio'].aspect; }
@@ -263,17 +261,7 @@
         const dep = src.depth.d[i]; t = Math.min(1, t + 0.2 * Math.pow(1 - dep, 2) - 0.05 * dep);
         // the closing portrait drifts through every facet's ink from top to bottom
         let col;
-        if (spec.trueColor && src.col) {
-          // the painting's own colour, lifted a little so even its shadows read as light words on the dark ground
-          // a touch richer in colour, and every tone raised into the light half so faces and shadows stay readable
-          const p = src.col, m = (p[i * 4] + p[i * 4 + 1] + p[i * 4 + 2]) / 3;
-          let c = [0, 1, 2].map(k => m + (p[i * 4 + k] - m) * 1.3);
-          const l = Math.max(8, c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11), to = 150 + 0.42 * l, k = to / l;
-          c = c.map(v => v * k); const over = Math.max(...c) - 255;
-          if (over > 0) c = c.map(v => Math.min(255, v + over * 0.5));
-          col = c.map(v => Math.max(0, Math.min(255, Math.round(v))));
-        }
-        else if (ramps.length === 1) col = ramps[0](t);
+        if (ramps.length === 1) col = ramps[0](t);
         else {   // continuous blend between neighbouring inks, no bands
           const y = ((i / f.w) | 0) / f.h * (ramps.length - 1), k = Math.min(ramps.length - 2, y | 0), e = y - k, s = e * e * (3 - 2 * e);
           col = mix(ramps[k](t), ramps[k + 1](t), s);

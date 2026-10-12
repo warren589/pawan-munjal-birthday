@@ -67,7 +67,7 @@
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
-      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, headWeight: f.headWeight, strokes: f.strokes, trueColor: f.trueColor, ink: f.ink, words, seed: 100 + fi }
+      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, headWeight: f.headWeight, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
       : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
@@ -118,6 +118,80 @@
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
   }
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
+
+  // ---------------- the family: the painting itself, set in words ----------------
+  // One facet is shown differently. Instead of a cut-out portrait, the whole family painting appears large and in its
+  // own colours, made of rows of small words (finer across the faces, so each one stays recognisable), with the
+  // painting's brushwork showing faintly between the letters. Desktop: wide across the screen, the text below it.
+  // Phone: as tall as the other portraits, panning slowly across the family as you scroll.
+  const ART = (() => {
+    const fi = FACETS.findIndex(f => f.art); if (fi < 0) return null;
+    const f = FACETS[fi], state = String(fi), el = $('.famart'), x = el.getContext('2d'), img = new Image(), root = document.documentElement;
+    let built = '', box = null, shown = -1;
+    img.src = f.art;
+    const loaded = img.decode().catch(() => {});
+    function place() {
+      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 2000 / 733;
+      let w, h, top;
+      if (MOBILE.matches) { h = H; w = h * ar; top = parseFloat(getComputedStyle(root).getPropertyValue('--hdr')) + 2; }
+      else { w = Math.min(vw - 260, vh * 0.56 * ar); h = w / ar; top = vh - H; }   // clear of the facet rail on the right
+      box = { w: Math.round(w), h: Math.round(h), top };
+      Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px' });
+      root.style.setProperty('--artH', box.h + 'px'); root.style.setProperty('--artW', box.w + 'px');
+      shown = -1;
+    }
+    function build() {
+      if (!box || !img.naturalWidth) return;
+      const d = Math.min(2, dpr), cw = Math.round(box.w * d), ch = Math.round(box.h * d), key = cw + 'x' + ch;
+      if (key === built) return; built = key;
+      el.width = cw; el.height = ch;
+      // the words, in white, row after row
+      const t = document.createElement('canvas'); t.width = cw; t.height = ch;
+      const tx = t.getContext('2d'), words = spec(state).words.map(w => w.t.toUpperCase()), R = seeded(fi * 31 + 7);
+      if ('letterSpacing' in tx) tx.letterSpacing = '0.2px';
+      tx.fillStyle = '#fff'; tx.textBaseline = 'alphabetic';
+      const rows = fs => {
+        tx.font = `700 ${fs}px ${window.WP_FONT}`;
+        for (let y = fs * 0.8; y < ch + fs; y += fs * 0.96) {
+          let px = -R() * fs * 4;
+          while (px < cw) { const w = words[(R() * words.length) | 0]; tx.fillText(w, px, y); px += tx.measureText(w).width + fs * 0.3; }
+        }
+      };
+      // the faces (kept in the facet's data relative to the group) in finer words, everything else in the body size
+      const ex = 65 / 2000, ey = 9 / 733, sx = 1830 / 2000, sy = 724 / 733;
+      const faces = f.heads.map(([hx, hy, rx, ry]) => [(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx * cw * 1.3, ry * sy * ch * 1.25]);
+      const ellipses = () => { tx.beginPath(); faces.forEach(([a, b, rx, ry]) => { tx.moveTo(a + rx, b); tx.ellipse(a, b, rx, ry, 0, 0, Math.PI * 2); }); };
+      const body = ch / 74;
+      tx.save(); tx.beginPath(); tx.rect(0, 0, cw, ch); faces.forEach(([a, b, rx, ry]) => { tx.moveTo(a + rx, b); tx.ellipse(a, b, rx, ry, 0, 0, Math.PI * 2, true); }); tx.clip('evenodd'); rows(body); tx.restore();
+      tx.save(); ellipses(); tx.clip(); rows(body * 0.56); tx.restore();
+      // coloured by the painting, a touch brighter so the words carry it on the dark ground
+      tx.globalCompositeOperation = 'source-in'; tx.filter = 'brightness(1.12) saturate(1.08)'; tx.drawImage(img, 0, 0, cw, ch); tx.filter = 'none';
+      // the painting faintly underneath, so its brushwork shows between the letters; the words on top
+      x.clearRect(0, 0, cw, ch);
+      x.globalAlpha = 0.32; x.drawImage(img, 0, 0, cw, ch);
+      x.globalAlpha = 1; x.drawImage(t, 0, 0);
+      // and the edges melt into the ground
+      x.globalCompositeOperation = 'destination-in';
+      const fade = (x0, y0, x1, y1, a, b) => { const g = x.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(a, '#000'); g.addColorStop(b, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, cw, ch); };
+      fade(0, 0, cw, 0, 0.05, 0.95); fade(0, 0, 0, ch, 0.06, 0.93);
+      x.globalCompositeOperation = 'source-over';
+    }
+    // v: how present the painting is (0–1). On a phone it also pans with the scroll through its section.
+    function show(v) {
+      v = Math.round(v * 100) / 100;
+      const mob = MOBILE.matches;
+      if (v === shown && !mob) return; shown = v;
+      el.style.opacity = v; el.style.visibility = v > 0.005 ? 'visible' : 'hidden';
+      if (v <= 0.005 || !box) return;
+      const rise = (REDUCED.matches ? 0 : (1 - v) * 18).toFixed(1);
+      if (mob) {
+        const r = $('#facet-' + fi).getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
+        el.style.transform = `translate(${(-(box.w - innerWidth) * p).toFixed(1)}px, ${rise}px)`;
+      } else el.style.transform = `translate(-50%, ${rise}px)`;
+    }
+    return { state, loaded, place, build, show };
+  })();
+  const isArt = s => !!ART && s === ART.state;
 
   // visitor words: { id, t, facets, m, arrived:{state:time}, landed }
   const visitor = [];
@@ -209,7 +283,12 @@
     const b = blend(); view = { ...b, state: b.e < 0.5 ? b.a : b.b };
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     let anim = find !== findTarget;
-    if (b.b !== b.a && b.e > 0 && b.e < 1 && !REDUCED.matches) {
+    if (isArt(b.a) || isArt(b.b)) {
+      // to and from the family painting: the portrait fades as the painting rises into place, and back
+      const fa = b.a === b.b ? 1 : isArt(b.b) ? b.e : 1 - b.e, other = isArt(b.a) ? b.b : b.a;
+      if (!isArt(other)) anim = drawPortrait(other, 1 - smooth(0.05, 0.55, fa), 0, 1, now) || anim;
+      ART.show(smooth(0.4, 0.95, fa));
+    } else if (b.b !== b.a && b.e > 0 && b.e < 1 && !REDUCED.matches) {
       // shuffle: every word of one portrait travels into the next and becomes one of its words
       const A = layoutFor(b.a), B = layoutFor(b.b);
       // the scenes simply crossfade behind the shuffling words
@@ -233,6 +312,7 @@
       anim = drawPortrait(b.a, 1 - b.e, 0, 1, now) || anim;
       anim = drawPortrait(b.b, b.e, 0, 1, now) || anim;
     } else anim = drawPortrait(b.a, 1, 0, 1, now) || anim;
+    if (ART && !isArt(b.a) && !isArt(b.b)) ART.show(0);
     syncState(view.state); placeNotes(b);
     // the line is only there while a facet is settled; it fades through the crossfade
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
@@ -303,12 +383,13 @@
   }
   // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
   function warm() { warmGen++; run(jobsFor(STATES), 7); }
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (ART) { ART.place(); ART.build(); } if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
-  const local = e => { const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
+  const local = e => { if (isArt(view.state)) return [-1e6, -1e6]; const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
   function wordAt(x, y, pad) {
-    const s = view.state, L = layoutFor(s);
+    const s = view.state; if (isArt(s)) return null;   // the family painting has no single words to point at
+    const L = layoutFor(s);
     for (const v of visitor) {
       const sl = showsIn(v, s) && v.arrived[s] && L.slots.get(v.id);
       if (sl && x >= sl.x - pad && x <= sl.x + sl.w + pad && y >= sl.y - pad && y <= sl.y + sl.h + pad) return { ...sl, t: v.t, m: v.m, mine: true };
@@ -705,26 +786,13 @@
     draw();
   })();
 
-  // ---------------- the painted ground: drifts slowly upwards over the length of the page ----------------
-  (() => {
-    const g = $('.ground'), root = document.documentElement; let raf = 0, gh = 0;
-    const size = () => { gh = Math.round(Math.max(innerHeight * 1.7, innerWidth * 2600 / 1400)); root.style.setProperty('--gh', gh + 'px'); };
-    const draw = () => {
-      raf = 0;
-      const max = Math.max(1, root.scrollHeight - innerHeight), p = Math.min(1, scrollY / max);
-      root.style.setProperty('--gy', (-p * (gh - innerHeight)).toFixed(1) + 'px');
-    };
-    addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
-    addEventListener('resize', () => { size(); draw(); });
-    size(); draw();
-  })();
-
   // ---------------- boot ----------------
   (async function boot() {
     await Promise.race([Promise.all([document.fonts.load('400 20px "Archivo Narrow"'), document.fonts.load('700 20px "Archivo Narrow"')]).catch(() => {}),
       new Promise(r => setTimeout(r, 2500))]);
     await wp.init(window.PORTRAITS);
     geometry();
+    if (ART) { await ART.loaded; ART.place(); ART.build(); }
     // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
     // the shuffles between them); the rest is prepared in the background once the page is open
     const bar = $('.splash__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
