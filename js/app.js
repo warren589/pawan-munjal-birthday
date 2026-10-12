@@ -184,10 +184,10 @@
       g.clearRect(0, 0, W2, H2);
       if (f.artScene.paint) {
         // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
-        g.globalAlpha = 0.78; g.filter = 'brightness(0.78) saturate(0.95)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+        g.globalAlpha = 0.84; g.filter = 'brightness(0.88) saturate(1)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
       } else {
-        g.globalAlpha = 0.34; g.filter = 'brightness(0.72) saturate(0.9)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
-        g.globalAlpha = 0.62; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
+        g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
+        g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
       }
       // a clear margin round the figure
       g.globalCompositeOperation = 'destination-out'; g.filter = `blur(${Math.round(7 * D)}px)`; g.drawImage(img, ox, oy, bw, bh); g.drawImage(img, ox, oy, bw, bh); g.filter = 'none';
@@ -305,7 +305,7 @@
         for (let y = q.cy - q.hh + fsI * CAP; y < q.cy + q.hh + stepI; y += stepI) line(fsI, y, q.cx - q.hw, q.cx + q.hw, false, false, 'i');
       });
       // the faces: their own finer rows, only where a face is
-      const fsF = body * 0.8, stepF = fsF * CAP + fsF * 0.1;
+      const fsF = body * 0.56, stepF = fsF * CAP + fsF * 0.1;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
         const yc = y - fsF * CAP / 2, spans = [];
         faces.forEach(([a, b, rx, ry]) => { const e = (yc - b) / (ry * 1.15); if (Math.abs(e) < 1) { const hw = rx * 1.15 * Math.sqrt(1 - e * e); spans.push([a - hw - fsF * 2, a + hw + fsF * 2]); } });
@@ -345,7 +345,7 @@
       // a copy of the letter rows in full, for the hover highlight; the picture itself shows them only inside the letters
       const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
       ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
-      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.1)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.03) saturate(1.2)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
       // a floor under the words' colour: words on dark clothes stay legible against the dark ground instead of vanishing
       for (const [c0, g] of [[bc, bg], [fc, fg]]) {
         const [flc, flg] = mk(); flg.fillStyle = 'rgb(108, 103, 100)'; flg.fillRect(0, 0, cw, ch); flg.globalCompositeOperation = 'destination-in'; flg.drawImage(c0, 0, 0);
@@ -356,7 +356,7 @@
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.14; g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.globalAlpha = 1;
       }
       // the brushwork under the words, on the family only
-      const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.filter = 'saturate(1.02)'; ug.drawImage(img, 0, 0, cw, ch); ug.filter = 'none'; ug.globalAlpha = 1;
+      const [uc, ug] = mk(); ug.globalAlpha = 0.48; ug.filter = 'saturate(1.12)'; ug.drawImage(img, 0, 0, cw, ch); ug.filter = 'none'; ug.globalAlpha = 1;
       // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
       const [sc, sg] = mk(); sg.font = font(body * 0.8);
       for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.92) { let px = -R() * body * 3; while (px < cw) { const t = pick(); sg.fillText(t, px, y); px += widthOf(t, body * 0.8) + body * 0.17; } }
