@@ -217,12 +217,9 @@
         }
       }
       for (let k = 0, y = y0; y < ch + step; k++, y += step) {
-        const bl = big.filter(q => k >= q.k0 && k <= q.k1).sort((p, q) => p.x0 - q.x0);
-        let a = -body * 2, ta = false;
-        for (const q of bl) { line(body, y, a, q.x0, ta, true, 'b'); a = q.x1; ta = true; }
-        line(body, y, a, cw + body * 2, ta, false, 'b');
+        line(body, y, -body * 2, cw + body * 2, false, false, 'b');   // rows run on under the large words too
       }
-      big.forEach(q => words.push({ t: q.t, x: q.x, y: q.y, w: q.w, fs: q.fs, s: 1, tag: 'b', big: true }));
+      big.forEach(q => words.push({ t: q.t, x: q.x, y: q.y, w: q.w, fs: q.fs, s: 1, tag: 'g', big: true }));
       // the faces: their own finer rows, only where a face is
       const fsF = body * 0.66, stepF = fsF * CAP + fsF * 0.14;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
@@ -239,17 +236,20 @@
         return w.tag === 'f' ? inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12) : w.big || !inFace(w.x + w.w / 2, my, 0.85);
       });
       // draw the two sets, each coloured by the cut-out painting, and blend them along feathered ellipses round the faces
-      const [bc, bg] = mk(), [fc, fg] = mk();
-      words.forEach(w => { const g = w.tag === 'f' ? fg : bg; g.font = font(w.fs); g.setTransform(w.s, 0, 0, 1, w.x, w.y); g.fillText(w.t, 0, 0); });
-      bg.setTransform(1, 0, 0, 1, 0, 0); fg.setTransform(1, 0, 0, 1, 0, 0);
+      const [bc, bg] = mk(), [fc, fg] = mk(), [gc, gg] = mk();
+      words.forEach(w => { const g = w.tag === 'f' ? fg : w.tag === 'g' ? gg : bg; g.font = font(w.fs); g.setTransform(w.s, 0, 0, 1, w.x, w.y); g.fillText(w.t, 0, 0); });
+      bg.setTransform(1, 0, 0, 1, 0, 0); fg.setTransform(1, 0, 0, 1, 0, 0); gg.setTransform(1, 0, 0, 1, 0, 0);
       const [mkc, mkg] = mk(); mkg.fillStyle = '#000'; mkg.filter = `blur(${Math.round(body * 0.45)}px)`;
       mkg.beginPath(); faces.forEach(([a, b, rx, ry]) => { mkg.moveTo(a + rx, b); mkg.ellipse(a, b, rx, ry, 0, 0, Math.PI * 2); }); mkg.fill(); mkg.filter = 'none';
       fg.globalCompositeOperation = 'destination-in'; fg.drawImage(mkc, 0, 0);
       bg.globalCompositeOperation = 'destination-out'; bg.drawImage(mkc, 0, 0);
-      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      // under each large word the small rows carry on, cut back from its letters by a thin margin, so fragments of them
+      // fill the counters and the spaces between its letters
+      bg.globalCompositeOperation = 'destination-out'; bg.fillStyle = bg.strokeStyle = '#000'; bg.lineJoin = 'round';
+      big.forEach(q => { bg.font = font(q.fs); bg.lineWidth = body * 0.42; bg.fillText(q.t, q.x, q.y); bg.strokeText(q.t, q.x, q.y); });
+      for (const g of [bg, fg, gg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
       // the large words a touch lighter than the painting under them, so they read first
-      bg.globalCompositeOperation = 'source-atop'; bg.globalAlpha = 0.12; bg.fillStyle = '#fff';
-      big.forEach(q => bg.fillRect(q.x - 2, q.y - q.fs * CAP - 2, q.w + 4, q.fs * CAP + 4)); bg.globalAlpha = 1;
+      gg.globalCompositeOperation = 'source-atop'; gg.globalAlpha = 0.12; gg.fillStyle = '#fff'; gg.fillRect(0, 0, cw, ch); gg.globalAlpha = 1;
       // the brushwork under the words, on the family only
       const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.drawImage(img, 0, 0, cw, ch); ug.globalAlpha = 1;
       // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
@@ -260,9 +260,9 @@
       const fade = (g, x0, y0_, x1, y1, a, b2) => { const gr = g.createLinearGradient(x0, y0_, x1, y1); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(a, '#000'); gr.addColorStop(b2, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, cw, ch); };
       fade(sg, 0, 0, cw, 0, 0.18, 0.82); fade(sg, 0, 0, 0, ch, 0.3, 0.7);
       // everything fades out softly towards the bottom, rather than ending on a cut
-      for (const g of [bg, fg, ug]) fade(g, 0, 0, 0, ch, 0, 0.7);
-      for (const g of [bg, fg, ug, sg]) g.globalCompositeOperation = 'source-over';
-      layers = { b: bc, f: fc, under: uc, scene: sc };
+      for (const g of [bg, fg, gg, ug]) fade(g, 0, 0, 0, ch, 0, 0.7);
+      for (const g of [bg, fg, gg, ug, sg]) g.globalCompositeOperation = 'source-over';
+      layers = { b: bc, f: fc, g: gc, under: uc, scene: sc };
       // each word's journey when the painting comes apart: a drift up and to the side, the large words last
       words.forEach(w => {
         const a = -Math.PI * (0.25 + R() * 0.5) + (R() - 0.5) * 0.6;
@@ -278,7 +278,7 @@
       if (!layers) return;
       x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(layers.scene, 0, 0);
       x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
-      if (q <= 0) { x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); return; }
+      if (q <= 0) { x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.g, 0, 0); return; }
       for (const w of words) {
         const p = Math.min(1, Math.max(0, (q - w.d) / 0.55)), e = easeIO(p), a = 1 - p * p;
         if (a <= 0.01) continue;
