@@ -147,7 +147,8 @@
       const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
       let w, h, left, top;
-      if (MOBILE.matches) { h = H; w = h * ar; if (w > vw - 8) { w = vw - 8; h = w / ar; } left = (vw - w) / 2; top = hdr + 2 + (H - h); }   // never wider than the screen: it stays still   // a wide group: at most a little wider than the screen, standing where the portraits stand
+      if (MOBILE.matches) { h = H - Math.round(Math.min(34, H * 0.07)); w = h * ar; if (w > vw - 8)   // a little air under the header; the painting still stands on the text below
+         { w = vw - 8; h = w / ar; } left = (vw - w) / 2; top = hdr + 2 + (H - h); }   // never wider than the screen: it stays still   // a wide group: at most a little wider than the screen, standing where the portraits stand
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
         const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
