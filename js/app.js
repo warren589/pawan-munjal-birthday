@@ -143,7 +143,7 @@
       if (MOBILE.matches) { h = H; w = h * ar; left = Math.max(0, (vw - w) / 2); top = hdr + 2; }   // wider than the screen: it pans
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
-        const zl = vw * 0.025, zr = vw * (state === 'hero' ? 0.585 : 0.63);   // the opening note sits a little further left
+        const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
         w = Math.min(zr - zl, (vh - hdr - 60) * ar); h = w / ar;
         left = zl + (zr - zl - w) / 2; top = Math.max(hdr + 12, vh / 2 - h * 0.44);
       }
@@ -200,28 +200,49 @@
         for (const t of run) { put(t, px, s); px += widthOf(t, fs) * s + space + extra; }
       }
 
-      // the row grid: every line the same height; a large word's capitals span whole lines, from the top of one to the
-      // baseline of another
-      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64), step = body * CAP + body * 0.14, y0 = body * CAP, sp = body * 0.22;
+      // the row grid: every line the same height
+      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64), step = body * CAP + body * 0.14, y0 = body * CAP;
+      // The larger words (desktop) are not laid over the picture: their letters are made of the small words themselves,
+      // set finer and closer inside each letter and a step brighter, with the words just round the letters dimmed a little,
+      // so a word appears out of the texture from a distance and is all small words close up. One main word per picture,
+      // a few at a medium size, each tilted with the body where that helps.
+      // feature: [word, centre x, centre y, widest it may be (fractions of the picture), most rows tall, tilt in degrees]
       const big = [];
-      if (!mob) for (const [t, u, v, maxW] of f.feature || []) {
-        const cx = u * cw, mw = maxW * cw;
-        for (let n = 7; n >= 2; n--) {
-          const fs = ((n - 1) * step + body * CAP) / CAP, w = widthOf(t, fs);
+      if (!mob) for (const [t, u, v, maxW, maxRows = 7, deg = 0] of f.feature || []) {
+        const cx = u * cw, cy = v * ch, mw = maxW * cw, ang = deg * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang);
+        for (let n = maxRows; n >= 2; n--) {
+          const fs = ((n - 1) * step + body * CAP) / CAP, w = widthOf(t, fs), capH = fs * CAP;
           if (w > mw) continue;
-          const k = Math.round((v * ch + ((n - 1) * step + body * CAP) / 2 - y0) / step), by = y0 + k * step, top = by - fs * CAP, px = cx - w / 2;
-          let fits = true;   // every part of it on the family, clear of every face and of the other large words
-          for (let i = 0; i <= 12 && fits; i++) { const qx = px + w * i / 12; for (const qy of [top, (top + by) / 2, by]) if (!onFamily(qx, qy) || inFace(qx, qy, 1.05)) { fits = false; break; } }
-          if (fits && big.some(q => k - n + 1 <= q.k1 && k >= q.k0 && px - sp < q.x1 && px + w + sp > q.x0)) fits = false;
+          // the word's frame: centred on (cx, cy), turned by ang
+          const at = (lx, ly) => [cx + lx * ca - ly * sa, cy + lx * sa + ly * ca];
+          let fits = true;   // every part of it on the figure, clear of every face and of the other large words
+          for (let i = 0; i <= 14 && fits; i++) for (const ly of [-capH / 2, 0, capH / 2]) {
+            const [qx, qy] = at(-w / 2 + w * i / 14, ly); if (!onFamily(qx, qy) || inFace(qx, qy, 1.08)) { fits = false; break; }
+          }
+          const hw = (w * Math.abs(ca) + capH * Math.abs(sa)) / 2 + body, hh = (w * Math.abs(sa) + capH * Math.abs(ca)) / 2 + body;
+          if (fits && big.some(q => Math.abs(q.cx - cx) < q.hw + hw && Math.abs(q.cy - cy) < q.hh + hh)) fits = false;
           if (!fits) continue;
-          big.push({ t, x: px, y: by, w, fs, k0: k - n + 1, k1: k, x0: px - sp, x1: px + w + sp });
+          big.push({ t, cx, cy, w, fs, capH, ang, hw, hh });
           break;
         }
       }
-      for (let k = 0, y = y0; y < ch + step; k++, y += step) {
-        line(body, y, -body * 2, cw + body * 2, false, false, 'b');   // rows run on under the large words too
-      }
-      big.forEach(q => words.push({ t: q.t, x: q.x, y: q.y, w: q.w, fs: q.fs, s: 1, tag: 'g', big: true }));
+      // the letter shapes, a hair bolder than the font (and, for the soft margin round them, much bolder)
+      const letters = (g, extra) => big.forEach(q => {
+        g.setTransform(Math.cos(q.ang), Math.sin(q.ang), -Math.sin(q.ang), Math.cos(q.ang), q.cx, q.cy);
+        g.font = font(q.fs); g.textAlign = 'center'; g.lineJoin = 'round'; g.lineWidth = extra;
+        g.fillText(q.t, 0, q.capH / 2); if (extra) g.strokeText(q.t, 0, q.capH / 2);
+        g.setTransform(1, 0, 0, 1, 0, 0); g.textAlign = 'left';
+      });
+      const [lc, lg] = mk(); lg.strokeStyle = '#fff'; letters(lg, body * 0.16);
+      const ld = big.length ? lg.getImageData(0, 0, cw, ch).data : null;
+      const inLetter = (px, py) => { if (!ld) return false; const X = px | 0, Y = py | 0; return X >= 0 && Y >= 0 && X < cw && Y < ch && ld[(Y * cw + X) * 4 + 3] > 100; };
+
+      for (let y = y0; y < ch + step; y += step) line(body, y, -body * 2, cw + body * 2, false, false, 'b');
+      // inside the letters: finer, closer rows over each word's area, sized to its letters so every stroke holds a row or two
+      big.forEach(q => {
+        const fsI = Math.max(body * 0.34, Math.min(body * 0.62, q.fs * 0.12)), stepI = fsI * CAP + fsI * 0.1;
+        for (let y = q.cy - q.hh + fsI * CAP; y < q.cy + q.hh + stepI; y += stepI) line(fsI, y, q.cx - q.hw, q.cx + q.hw, false, false, 'i');
+      });
       // the faces: their own finer rows, only where a face is
       const fsF = body * 0.66, stepF = fsF * CAP + fsF * 0.14;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
@@ -231,29 +252,37 @@
         const merged = []; spans.forEach(s0 => { const m = merged[merged.length - 1]; if (m && s0[0] <= m[1]) m[1] = Math.max(m[1], s0[1]); else merged.push(s0.slice()); });
         merged.forEach(([a, b]) => line(fsF, y, a, b, false, false, 'f'));
       }
-      // keep only words that show: on the family, and on the right side of the soft line between face and body
+      // keep only words that show: on the figure, on the right side of the soft line between face and body, and (for the
+      // letter rows) touching a letter, (for the body rows) not wholly inside one
       words = words.filter(w => {
         const my = w.y - w.fs * CAP / 2, on = onFamily(w.x + w.w / 2, my) || onFamily(w.x + 2, my) || onFamily(w.x + w.w - 2, my);
         if (!on) return false;
-        return w.tag === 'f' ? inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12) : w.big || !inFace(w.x + w.w / 2, my, 0.85);
+        if (w.tag === 'i') { for (let i = 0; i <= 6; i++) if (inLetter(w.x + w.w * i / 6, my)) return true; return false; }
+        if (w.tag === 'f') return inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12);
+        if (inLetter(w.x + 1, my) && inLetter(w.x + w.w / 2, my) && inLetter(w.x + w.w - 1, my)) return false;
+        return !inFace(w.x + w.w / 2, my, 0.85);
       });
-      // draw the two sets, each coloured by the cut-out painting, and blend them along feathered ellipses round the faces
-      const [bc, bg] = mk(), [fc, fg] = mk(), [gc, gg] = mk();
-      words.forEach(w => { const g = w.tag === 'f' ? fg : w.tag === 'g' ? gg : bg; g.font = font(w.fs); g.setTransform(w.s, 0, 0, 1, w.x, w.y); g.fillText(w.t, 0, 0); });
-      bg.setTransform(1, 0, 0, 1, 0, 0); fg.setTransform(1, 0, 0, 1, 0, 0); gg.setTransform(1, 0, 0, 1, 0, 0);
+      // draw the sets, each coloured by the cut-out painting, and blend body and faces along feathered ellipses
+      const [bc, bg] = mk(), [fc, fg] = mk(), [ic, ig] = mk();
+      words.forEach(w => { const g = w.tag === 'f' ? fg : w.tag === 'i' ? ig : bg; g.font = font(w.fs); g.setTransform(w.s, 0, 0, 1, w.x, w.y); g.fillText(w.t, 0, 0); });
+      for (const g of [bg, fg, ig]) g.setTransform(1, 0, 0, 1, 0, 0);
       const [mkc, mkg] = mk(); mkg.fillStyle = '#000'; mkg.filter = `blur(${Math.round(body * 0.45)}px)`;
       mkg.beginPath(); faces.forEach(([a, b, rx, ry]) => { mkg.moveTo(a + rx, b); mkg.ellipse(a, b, rx, ry, 0, 0, Math.PI * 2); }); mkg.fill(); mkg.filter = 'none';
       fg.globalCompositeOperation = 'destination-in'; fg.drawImage(mkc, 0, 0);
       bg.globalCompositeOperation = 'destination-out'; bg.drawImage(mkc, 0, 0);
-      // under each large word the small rows carry on, cut back from its letters by a thin margin, so fragments of them
-      // fill the counters and the spaces between its letters
-      bg.globalCompositeOperation = 'destination-out'; bg.fillStyle = bg.strokeStyle = '#000'; bg.lineJoin = 'round';
-      big.forEach(q => { bg.font = font(q.fs); bg.lineWidth = body * 0.42; bg.fillText(q.t, q.x, q.y); bg.strokeText(q.t, q.x, q.y); });
+      if (big.length) {
+        // round the letters the body words step back a little; inside them they give way to the letter rows
+        const [hc, hg] = mk(); hg.fillStyle = hg.strokeStyle = '#000'; hg.filter = `blur(${Math.round(body * 0.5)}px)`; letters(hg, body * 1.3); hg.filter = 'none';
+        bg.globalCompositeOperation = 'destination-out'; bg.globalAlpha = 0.62; bg.drawImage(hc, 0, 0); bg.globalAlpha = 1; bg.drawImage(lc, 0, 0);
+      }
+      // a copy of the letter rows in full, for the hover highlight; the picture itself shows them only inside the letters
+      const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
+      ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
       for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
-      // the large words take the painting's colour softened, so a dark brushstroke across one never cuts a letter in two
-      gg.globalCompositeOperation = 'source-in'; gg.filter = `blur(${Math.round(body * 0.9)}px) brightness(1.18) saturate(1.1)`; gg.drawImage(img, 0, 0, cw, ch); gg.filter = 'none';
-      // the large words a touch lighter than the painting under them, so they read first
-      gg.globalCompositeOperation = 'source-atop'; gg.globalAlpha = 0.12; gg.fillStyle = '#fff'; gg.fillRect(0, 0, cw, ch); gg.globalAlpha = 1;
+      for (const g of [ig, ifg]) {   // the letter rows a clear step brighter, in the painting's colour softened so no dark stroke breaks a letter
+        g.globalCompositeOperation = 'source-in'; g.filter = `blur(${Math.round(body * 0.6)}px) brightness(1.58) saturate(1.12)`; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none';
+        g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.14; g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.globalAlpha = 1;
+      }
       // the brushwork under the words, on the family only
       const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.drawImage(img, 0, 0, cw, ch); ug.globalAlpha = 1;
       // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
@@ -264,14 +293,14 @@
       const fade = (g, x0, y0_, x1, y1, a, b2) => { const gr = g.createLinearGradient(x0, y0_, x1, y1); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(a, '#000'); gr.addColorStop(b2, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, cw, ch); };
       fade(sg, 0, 0, cw, 0, 0.18, 0.82); fade(sg, 0, 0, 0, ch, 0.3, 0.7);
       // everything fades out softly towards the bottom, rather than ending on a cut
-      for (const g of [bg, fg, gg, ug]) fade(g, 0, 0, 0, ch, 0, f.artFade || 0.7);
-      for (const g of [bg, fg, gg, ug, sg]) g.globalCompositeOperation = 'source-over';
-      layers = { b: bc, f: fc, g: gc, under: uc, scene: sc };
-      // each word's journey when the painting comes apart: a drift up and to the side, the large words last
+      for (const g of [bg, fg, ig, ifg, ug]) fade(g, 0, 0, 0, ch, 0, f.artFade || 0.7);
+      for (const g of [bg, fg, ig, ifg, ug, sg]) g.globalCompositeOperation = 'source-over';
+      layers = { b: bc, f: fc, i: ic, full: ifc, under: uc, scene: sc };
+      // each word's journey when the painting comes apart: a drift up and to the side, the letter rows last
       words.forEach(w => {
         const a = -Math.PI * (0.25 + R() * 0.5) + (R() - 0.5) * 0.6;
         w.dx = Math.cos(a) * (60 + R() * 220) * D; w.dy = Math.sin(a) * (60 + R() * 200) * D; w.rot = (R() - 0.5) * 0.5;
-        w.m = msgFor(w.t); w.d = w.big ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
+        w.m = msgFor(w.t); w.d = w.tag === 'i' ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
       });
       shown = -1;
     }
@@ -283,8 +312,28 @@
       x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(layers.scene, 0, 0);
       x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
       if (q <= 0) {
-        x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.g, 0, 0);
-        if (hl) { x.fillStyle = '#f2ece2'; x.globalAlpha = 0.95; x.fillRect(hl.x - D, hl.y + hl.fs * 0.14, hl.w + 2 * D, Math.max(1.5 * D, hl.fs * 0.07)); x.globalAlpha = 1; }   // the word you are pointing at
+        x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.i, 0, 0);
+        if (hl) {
+          // the word you are pointing at, gently: the words round it settle back, a soft warm highlight, and the word
+          // itself a little larger and brighter in place, so it can be read without anything covering its neighbours
+          const S = Math.max(1.6, 15 * D / hl.h), cx = hl.x + hl.w / 2, cy = hl.top + hl.h / 2, r = hl.w * S * 0.7 + hl.h * S;   // large enough to read at a glance
+          const rg = x.createRadialGradient(cx, cy, 0, cx, cy, r); rg.addColorStop(0, 'rgba(16,13,12,0.5)'); rg.addColorStop(0.6, 'rgba(16,13,12,0.22)'); rg.addColorStop(1, 'rgba(16,13,12,0)');
+          x.fillStyle = rg; x.fillRect(cx - r, cy - r, r * 2, r * 2);
+          const bw = hl.w * S + hl.h * 0.9, bh = hl.h * S * 0.92;
+          x.fillStyle = 'rgba(255, 228, 170, 0.16)'; x.beginPath(); x.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh * 0.3); x.fill();
+          // set afresh at the larger size (crisp, not an enlarged copy), in the painting's colour there, lifted towards the light
+          if (!hl.spr) {
+            const fsz = hl.fs * S, t = document.createElement('canvas'), g = t.getContext('2d'); g.font = `700 ${fsz}px ${window.WP_FONT}`;
+            const tw = Math.ceil(g.measureText(hl.t).width + fsz * 0.4), th = Math.ceil(fsz * 1.2); t.width = tw; t.height = th;
+            g.font = `700 ${fsz}px ${window.WP_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(hl.t, tw / 2, th / 2);
+            // coloured by the painting under the word, softened and lifted towards the light
+            g.globalCompositeOperation = 'source-in'; g.filter = `blur(${Math.round(fsz * 0.15)}px) brightness(1.9) saturate(1.1)`;
+            const kx = img.naturalWidth / el.width, ky = img.naturalHeight / el.height;
+            g.drawImage(img, (cx - tw / 2) * kx, (cy - th / 2) * ky, tw * kx, th * ky, 0, 0, tw, th); g.filter = 'none';
+            hl.spr = t;
+          }
+          x.shadowColor = 'rgba(10,8,8,0.75)'; x.shadowBlur = 6 * D; x.drawImage(hl.spr, cx - hl.spr.width / 2, cy - hl.spr.height / 2); x.shadowBlur = 0;
+        }
         return;
       }
       for (const w of words) {
@@ -339,7 +388,7 @@
       const r = el.getBoundingClientRect(); if (!r.width) return null;
       const px = (cx - r.left) * el.width / r.width, py = (cy - r.top) * el.height / r.height, pd = pad * D;
       let best = null;
-      for (const w of words) if (px >= w.x - pd && px <= w.x + w.w + pd && py >= w.top - pd && py <= w.top + w.h + pd) { if (w.big) return w; if (!best || w.tag === 'f') best = w; }
+      for (const w of words) if (px >= w.x - pd && px <= w.x + w.w + pd && py >= w.top - pd && py <= w.top + w.h + pd) { if (!best || w.tag !== 'b') best = w; }   // a face or letter word wins over the row beneath it
       return best;
     }
     const rectOf = w => { const r = el.getBoundingClientRect(), k = r.width / el.width; return { left: r.left + w.x * k, top: r.top + w.top * k, width: w.w * k, height: w.h * k }; };
@@ -348,12 +397,6 @@
       if (e.pointerType !== 'mouse') return;
       const w = hit(e.clientX, e.clientY, 1);
       el.style.cursor = w ? 'pointer' : 'default';
-      if (w) {
-        const fr = frame.getBoundingClientRect(), wr = rectOf(w);
-        loupe.textContent = w.t; loupe.classList.remove('mine');
-        loupe.style.transform = `translate(${wr.left + wr.width / 2 - fr.left}px, ${wr.top - 8 - fr.top}px)`;
-        loupe.classList.add('on');
-      } else loupe.classList.remove('on');
       highlight(w || (picked && picked.art === api ? picked.w : null));
     });
     el.addEventListener('pointerleave', () => { loupe.classList.remove('on'); highlight(picked && picked.art === api ? picked.w : null); });
@@ -363,7 +406,7 @@
     });
     // where a visitor's word lands in the painting: one of its small body words, near the middle, chosen by the word's id
     function spot(id) {
-      const mid = words.filter(w => w.tag === 'b' && !w.big && w.y > el.height * 0.3 && w.y < el.height * 0.75 && Math.abs(w.x + w.w / 2 - el.width / 2) < el.width * 0.25);
+      const mid = words.filter(w => w.tag === 'b' && w.y > el.height * 0.3 && w.y < el.height * 0.75 && Math.abs(w.x + w.w / 2 - el.width / 2) < el.width * 0.25);
       if (!mid.length) return null;
       let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
       return rectOf(mid[h % mid.length]);
@@ -372,7 +415,10 @@
     return api;
   };
   const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(String(i), f, i); });
-  if (window.HERO_ART) ARTS.hero = makeArt('hero', window.HERO_ART, 11);   // the opening portrait is a painting too
+  if (window.HERO_ART) {   // the opening and closing portraits are the same painting, with their own words
+    ARTS.hero = makeArt('hero', window.HERO_ART, 11);
+    ARTS.final = makeArt('final', { ...window.HERO_ART, feature: window.HERO_ART.finalFeature || window.HERO_ART.feature }, 12);
+  }
   const ART_LIST = Object.values(ARTS);
   const isArt = s => !!ARTS[s];
 
