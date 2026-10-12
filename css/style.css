@@ -60,6 +60,22 @@ body[data-state="hero"] .rail, body:not([data-state]) .rail { pointer-events: no
 .rail button:hover span { opacity: 1; transform: translate(0, -50%); }
 @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(240, 100, 63, .5); } 100% { box-shadow: 0 0 0 12px rgba(240, 100, 63, 0); } }
 .rail button.ping::after { background: var(--accent); border-color: var(--accent); animation: ping 1s var(--ease) 2; }
+/* desktop: the facets as a short list of names, quiet beside the portraits; the one you are on in its facet's colour */
+@media (min-width: 821px) and (orientation: landscape), (min-width: 1101px) {
+  .rail { right: 30px; gap: 1px; }
+  .rail::before, .rail::after, .rail button::after, .rail button b { display: none; }
+  .rail button { padding: 6px 0 6px 16px; color: var(--muted); transition: color .3s var(--ease); }
+  .rail button span { position: relative; right: auto; top: auto; display: inline-block; opacity: 1; transform: none; pointer-events: none; text-transform: none; font: 500 13px/1.2 var(--sans); letter-spacing: -0.005em; color: inherit; }
+  .rail button span::before { content: ''; position: absolute; right: calc(100% + 7px); top: 50%; width: 9px; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: 100% 50%; transition: transform .4s var(--ease); }
+  .rail button:hover { color: var(--ink-soft); }
+  .rail button.on { color: var(--ink); }
+  .rail button.on span::before { transform: none; }
+  .rail button.ping span { animation: railPing 1s var(--ease) 2; }
+  .rail button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+  /* the text beside each painting keeps clear of the list */
+  body .sec.painted .note { left: 65vw; width: min(330px, 24vw); }
+}
+@keyframes railPing { 50% { color: var(--accent); } }
 
 /* ---------- stage: one sticky portrait, notes scroll past it ---------- */
 main { position: relative; }

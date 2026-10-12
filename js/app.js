@@ -89,9 +89,9 @@
           ${f.img ? '' : '<p class="pending-photo">Placeholder silhouette · photograph to come</p>'}
         </div>
       </section>`);
-    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${tint(f.ink[0])}"><span>${f.name}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
+    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" aria-label="${f.name}" style="--ink:${tint(f.ink[0])}"><span>${f.short}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
   });
-  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#f2ece2"><span>The whole person</span><b>∗</b></button>`);
+  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" aria-label="The whole person" style="--ink:#f2ece2"><span>One life</span><b>∗</b></button>`);
   chapters.addEventListener('click', e => {
     const b = e.target.closest('.js-story'); if (!b) return;
     const st = b.nextElementSibling, open = st.hidden;
@@ -338,7 +338,7 @@
       // a copy of the letter rows in full, for the hover highlight; the picture itself shows them only inside the letters
       const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
       ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
-      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.1)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
       // a floor under the words' colour: words on dark clothes stay legible against the dark ground instead of vanishing
       for (const [c0, g] of [[bc, bg], [fc, fg]]) {
         const [flc, flg] = mk(); flg.fillStyle = 'rgb(108, 103, 100)'; flg.fillRect(0, 0, cw, ch); flg.globalCompositeOperation = 'destination-in'; flg.drawImage(c0, 0, 0);
@@ -349,7 +349,7 @@
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.14; g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.globalAlpha = 1;
       }
       // the brushwork under the words, on the family only
-      const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.drawImage(img, 0, 0, cw, ch); ug.globalAlpha = 1;
+      const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.filter = 'saturate(1.02)'; ug.drawImage(img, 0, 0, cw, ch); ug.filter = 'none'; ug.globalAlpha = 1;
       // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
       const [sc, sg] = mk(); sg.font = font(body * 0.8);
       for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.92) { let px = -R() * body * 3; while (px < cw) { const t = pick(); sg.fillText(t, px, y); px += widthOf(t, body * 0.8) + body * 0.17; } }
