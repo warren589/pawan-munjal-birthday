@@ -135,7 +135,7 @@
     el.className = 'famart'; el.setAttribute('aria-label', `${f.name}: an oil painting, set in words. Hover or tap a word to read the message behind it.`);
     $('.stage').appendChild(el);
     const img = new Image(), mimg = new Image(), bimg = new Image();
-    let built = '', box = null, shown = -1, words = [], layers = null, D = 1, hl = null, lastQ = 0;
+    let built = '', box = null, shown = -1, words = [], layers = null, D = 1, hl = null, lastQ = 0, slots = new Map(), stamp = '';
     img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
     const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode()]).catch(() => {});
     function place() {
@@ -301,7 +301,7 @@
       const fade = (g, x0, y0_, x1, y1, a, b2) => { const gr = g.createLinearGradient(x0, y0_, x1, y1); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(a, '#000'); gr.addColorStop(b2, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, cw, ch); };
       fade(sg, 0, 0, cw, 0, 0.18, 0.82); fade(sg, 0, 0, 0, ch, 0.3, 0.7);
       // everything fades out softly towards the bottom, rather than ending on a cut
-      for (const g of [bg, fg, ig, ifg, ug]) fade(g, 0, 0, 0, ch, 0, f.artFade || 0.7);
+      for (const g of [bg, fg, ig, ifg, ug]) { fade(g, 0, 0, 0, ch, 0, f.artFade || 0.7); if (f.artFadeX) fade(g, 0, 0, cw, 0, f.artFadeX, 1 - f.artFadeX); }   // and at the sides, where the photograph itself cut people off
       for (const g of [bg, fg, ig, ifg, ug, sg]) g.globalCompositeOperation = 'source-over';
       layers = { b: bc, f: fc, i: ic, full: ifc, under: uc, scene: sc };
       // each word's journey when the painting comes apart: a drift up and to the side, the letter rows last
@@ -310,7 +310,7 @@
         w.dx = Math.cos(a) * (60 + R() * 220) * D; w.dy = Math.sin(a) * (60 + R() * 200) * D; w.rot = (R() - 0.5) * 0.5;
         w.m = msgFor(w.t); w.d = w.tag === 'i' ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
       });
-      shown = -1;
+      slots = new Map(); shown = -1;
     }
     const easeIO = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     function paint(q) {
@@ -318,9 +318,11 @@
       x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch);
       if (!layers) return;
       x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(layers.scene, 0, 0);
-      x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
+      x.globalAlpha = (1 - smooth(0, 0.45, q)) * (1 - 0.6 * find); x.drawImage(layers.under, 0, 0);
       if (q <= 0) {
-        x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.i, 0, 0);
+        const dim = 1 - 0.72 * find;
+        x.globalAlpha = dim; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.i, 0, 0); x.globalAlpha = 1;
+        paintMine(1);
         if (hl) { x.fillStyle = '#f2ece2'; x.globalAlpha = 0.95; x.fillRect(hl.x, hl.y + hl.fs * 0.12, hl.w, Math.max(1.5 * D, hl.fs * 0.08)); x.globalAlpha = 1; }   // the word you are pointing at
         return;
       }
@@ -340,8 +342,9 @@
     let painted = -1;
     function show(v) {
       v = Math.round(v * 200) / 200;
-      const mob = MOBILE.matches;
-      if (v === shown && !mob) return; shown = v;
+      const mob = MOBILE.matches, st = Math.round(find * 50) + '|' + mineHere().length;
+      if (v === shown && st === stamp && !mob) return; shown = v;
+      if (st !== stamp) { stamp = st; painted = -1; }
       el.style.opacity = v > 0.002 ? 1 : 0; el.style.visibility = v > 0.002 ? 'visible' : 'hidden';
       if (v <= 0.002 || !box) return;
       const q = REDUCED.matches ? 0 : 1 - v;
@@ -376,6 +379,7 @@
       const r = el.getBoundingClientRect(); if (!r.width) return null;
       const px = (cx - r.left) * el.width / r.width, py = (cy - r.top) * el.height / r.height, pd = pad * D * 1.5;
       let best = null;
+      for (const v of mineHere()) { const sl = slot(v); if (sl && px >= sl.x - pd && px <= sl.x + sl.w + pd && py >= sl.top - pd && py <= sl.top + sl.h + pd) return sl; }   // your own words first
       for (const w of words) if (px >= w.x - pd && px <= w.x + w.w + pd && py >= w.top - pd && py <= w.top + w.h + pd) { if (!best || w.tag !== 'b') best = w; }   // a face or letter word wins over the row beneath it
       return best;
     }
@@ -385,7 +389,7 @@
       if (e.pointerType !== 'mouse') return;
       const w = hit(e.clientX, e.clientY, 1);
       el.style.cursor = w ? 'pointer' : 'default';
-      if (w) showLoupe(w.t, rectOf(w), false); else hideLoupe();
+      if (w) showLoupe(w.t, rectOf(w), w.mine); else hideLoupe();
       highlight(w || (picked && picked.art === api ? picked.w : null));
     });
     el.addEventListener('pointerleave', () => { hideLoupe(); highlight(picked && picked.art === api ? picked.w : null); });
@@ -393,12 +397,36 @@
       const w = hit(e.clientX, e.clientY, e.pointerType === 'mouse' ? 1 : 6);
       if (w) { picked = { state, w, art: api }; highlight(w); hideLoupe(); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
     });
-    // where a visitor's word lands in the painting: one of its small body words, near the middle, chosen by the word's id
-    function spot(id) {
-      const mid = words.filter(w => w.tag === 'b' && w.y > el.height * 0.3 && w.y < el.height * 0.75 && Math.abs(w.x + w.w / 2 - el.width / 2) < el.width * 0.25);
-      if (!mid.length) return null;
-      let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-      return rectOf(mid[h % mid.length]);
+    // where a visitor's word lives in the painting: one of its body words of similar length, well inside the figure,
+    // chosen by the word's id and kept apart from the other visitors' words; the painted word gives it its place
+    function slot(v) {
+      if (slots.has(v.id)) return slots.get(v.id);
+      const n = v.t.length, used = [...slots.values()];
+      const cand = words.filter(w => w.tag === 'b' && Math.abs(w.t.length - n) <= 3 && w.y > el.height * 0.2 && w.y < el.height * 0.8 && w.x > el.width * 0.08 && w.x + w.w < el.width * 0.92);
+      if (!cand.length) return null;
+      let h = 0; for (const c of v.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      let best = null, bd = -1;
+      for (let k = 0; k < 20; k++) {
+        const w = cand[(h + k * 7919) % cand.length], d = used.length ? Math.min(...used.map(u => Math.hypot(u.x - w.x, u.y - w.y))) : 1e9;
+        if (d > bd) { bd = d; best = w; }
+      }
+      const sl = { ...best, t: v.t.toUpperCase(), m: v.m, mine: true, v };
+      slots.set(v.id, sl); return sl;
+    }
+    const mineHere = () => visitor.filter(v => v.landed && showsIn(v, state));
+    function spot(id) { const v = visitor.find(q => q.id === id); const sl = v && slot(v); return sl ? rectOf(sl) : null; }
+    // the visitors' words, in the one accent colour; while finding, the painting dims and they are marked
+    function paintMine(alpha) {
+      for (const v of mineHere()) {
+        const sl = slot(v); if (!sl) continue;
+        x.globalAlpha = alpha; x.font = `700 ${sl.fs}px ${window.WP_FONT}`;
+        const tw = x.measureText(sl.t).width, k = Math.min(1, sl.w / tw);
+        x.save(); x.globalCompositeOperation = 'destination-out'; x.fillRect(sl.x - 1, sl.top, sl.w + 2, sl.h); x.restore();   // the painted word makes way
+        const dw = tw * k, dx = sl.x + (sl.w - dw) / 2;
+        if (find > 0.01) { x.globalAlpha = alpha * find * 0.9; x.fillStyle = 'rgba(240,100,63,0.24)'; x.beginPath(); x.roundRect(dx - 4 * D, sl.top - 2 * D, dw + 8 * D, sl.h + 4 * D, 3 * D); x.fill(); }
+        x.globalAlpha = alpha; x.fillStyle = ACCENT; x.save(); x.translate(dx, sl.y); x.scale(k, 1); x.fillText(sl.t, 0, 0); x.restore();
+      }
+      x.globalAlpha = 1;
     }
     const api = { state, el, loaded, spot, place, build: () => { build(); painted = -1; }, show, ground, travellers, rectOf, unpick: () => highlight(null) };
     return api;
@@ -943,11 +971,18 @@
   const board = (() => {
     const sec = $('.wall'), pin = $('.wall__pin'), stage = $('.wall__stage'), cardsEl = $('.wall__cards'), head = $('.wall__head'), rest = $('.wall__rest');
     const HOLD = 0.4, MORPH = 1.0;            // viewport heights: scattered and held, then the move into the grid
-    let cards = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0, mob = false;
+    let cards = [], heads = [], itemYears = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0, mob = false, side = 0;
     const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
+    // the demo messages carry no dates, so each is given a year here; your own message is this year's
+    const THIS_YEAR = new Date().getFullYear(), YEARS = [0, 0, 1, 1, 2, 2, 3];
+    const yearOf = (m, i) => m.year || (m.mine ? THIS_YEAR : THIS_YEAR - YEARS[i % YEARS.length]);
     function source() {
+      const all = sourceAll().map((m, i) => ({ ...m, year: yearOf(m, i) }));
+      return all.map((m, i) => [m, i]).sort((a, b) => b[0].year - a[0].year || a[1] - b[1]).map(e => e[0]);   // newest year first, order kept within a year
+    }
+    function sourceAll() {
       const mine = messages.filter(m => m.mine).reverse();
       const short = messages.filter(m => !m.mine);
       const long = letters.map(l => ({ name: l.name, rel: l.rel, paras: l.paras }));
@@ -967,7 +1002,12 @@
       mob = MOBILE.matches;
       const items = source(), deco = [];   // a few letters only for the scattered view's depth; they fade as the grid forms
       for (let i = 0; i < (mob ? 0 : 6); i++) deco.push(items[(i * 7 + 3) % items.length]);
-      cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('');
+      const years = [...new Set(items.map(m => m.year))];
+      cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('')
+        + years.map(y => { const n = items.filter(m => m.year === y).length; return `<header class="wyear" data-y="${y}"><h3>${y}</h3><p>${n} ${n === 1 ? 'message' : 'messages'}</p></header>`; }).join('');
+      heads = $$('.wyear', cardsEl).map(el => ({ el, year: +el.dataset.y }));
+      items.forEach((m, i) => { m._i = i; });
+      itemYears = items.map(m => m.year);
       cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length, bg: el.querySelector('.wcard__bg'), full: el.querySelector('.wcard__full'), short: el.querySelector('.wcard__short') }));
       layout();
     }
@@ -977,17 +1017,25 @@
       mob = MOBILE.matches; vw = sec.clientWidth; vh = innerHeight; lastW = vw;
       const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
       const cols = mob ? (vw > 560 ? 2 : 1) : vw > 1500 ? 4 : vw > 980 ? 3 : 2;
-      const gap = mob ? 18 : 40, maxW = cols * 380 + (cols - 1) * gap, side = Math.max(mob ? 18 : 56, (vw - maxW) / 2);
+      const gap = mob ? 18 : 40, maxW = cols * 380 + (cols - 1) * gap; side = Math.max(mob ? 18 : 56, (vw - maxW) / 2);
       const cw = Math.floor((vw - side * 2 - gap * (cols - 1)) / cols);
       stage.style.height = vh + 'px';
       cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; });
       gTop = hdr + (mob ? 28 : 56);
       const colX = Array.from({ length: cols }, (_, k) => side + k * (cw + gap)), colH = colX.map(() => 0);
       const rates = [-0.05, 0.04, -0.03, 0.05];
-      cards.forEach(c => {
+      // a year heading opens each group, across the whole width; the group's letters then fill the columns below it
+      heads.forEach(h => { h.el.style.width = (vw - side * 2) + 'px'; });
+      const HEAD = mob ? 74 : 104;
+      let year = null, hi = 0;
+      cards.forEach((c, i) => {
         c.h = c.el.offsetHeight; c.sh = Math.min(c.h, c.short.offsetHeight); c.long = c.h - c.sh > 4;
         c.el.classList.toggle('is-long', c.long);
         if (c.deco) return;
+        if (itemYears[i] !== year) {
+          year = itemYears[i]; const top = hi ? Math.max(...colH) + (mob ? 26 : 48) : 0, h = heads.find(q => q.year === year);
+          if (h) h.y = top; hi++; colH.fill(top + HEAD);
+        }
         const k = colH.indexOf(Math.min(...colH)); c.gx = colX[k]; c.gy = colH[k]; c.rate = cols > 1 ? rates[k % 4] : 0; colH[k] += c.h + gap;
       });
       const gridH = Math.max(...colH);
@@ -1026,7 +1074,8 @@
         else if (c.layer < 0) { e = 1; a = clamp01((p - 0.45) / 0.45); }   // fades in at its place in the grid
         else e = REDUCED.matches ? (p > 0.5 ? 1 : 0) : ease(clamp01((p - c.d) / 0.5));
         const x = c.deco ? c.sx : c.sx + (c.gx - c.sx) * e;
-        const y = c.deco ? c.sy - p * 30 : c.layer < 0 ? gTop + c.gy - after * c.rate + (1 - a) * 24 : c.sy + (gTop + c.gy - after * c.rate - c.sy) * e;
+        const gy = gTop + c.gy + (c.rate || 0) * (gTop + c.gy - after - vh * 0.5);   // a gentle drift by distance from the middle of the screen
+        const y = c.deco ? c.sy - p * 30 : c.layer < 0 ? gy + (1 - a) * 24 : c.sy + (gy - c.sy) * e;
         const sc = c.ss + (1 - c.ss) * e;
         c.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(4)})`;
         // the card itself opens from the shortened letter to the full one, in small steps
@@ -1044,6 +1093,15 @@
           c.el.style.zIndex = k < 1 ? Math.max(1, c.layer + 1) : 1;
         }
       }
+      const ha = clamp01((p - 0.45) / 0.45);
+      // each year's heading stays just under the page header while its letters scroll past, until the next year pushes it on
+      const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
+      heads.forEach((h, i) => {
+        const own = gTop + (h.y || 0), next = heads[i + 1] ? gTop + heads[i + 1].y : Infinity, hh = h.el.offsetHeight;
+        let y = Math.max(own, after + hdr + 6); y = Math.min(y, next - hh - 24);
+        h.el.classList.toggle('stuck', y > own + 1);
+        h.el.style.transform = `translate(${side}px, ${(y + (1 - ha) * 20).toFixed(1)}px)`; h.el.style.opacity = ha; h.el.style.visibility = ha <= 0.01 ? 'hidden' : '';
+      });
       head.style.opacity = 1 - Math.min(1, p * 2.4);
       head.style.visibility = p > 0.45 ? 'hidden' : '';
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
