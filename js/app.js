@@ -174,7 +174,7 @@
       scn.width = W2; scn.height = H2;
       const g = sx2, ox = (box.left - sbox.left) * D, oy = (box.top - sbox.top) * D, bw = box.w * D, bh = box.h * D;
       const ix = ox + a.x * bw, iy = oy + a.y * bh, iw = a.w * bw, ih = a.h * bh;
-      // words, coloured by the painting
+      // words, coloured by the painting (unless the painting itself is shown)
       const wc = document.createElement('canvas'); wc.width = W2; wc.height = H2; const wg = wc.getContext('2d');
       const fs = body * 0.85, R = seeded(fi * 17 + 3), pool = [...new Set(spec(state).words.map(w => w.t.toUpperCase()))];
       wg.font = `700 ${fs}px ${window.WP_FONT}`; wg.fillStyle = '#fff'; wg.textBaseline = 'alphabetic';
@@ -182,8 +182,13 @@
       wg.globalCompositeOperation = 'source-in'; wg.filter = 'brightness(1.05) saturate(0.95)'; wg.drawImage(simg, ix, iy, iw, ih); wg.filter = 'none';
       // the brushwork underneath, darker, then the words over it
       g.clearRect(0, 0, W2, H2);
-      g.globalAlpha = 0.34; g.filter = 'brightness(0.72) saturate(0.9)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
-      g.globalAlpha = 0.62; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
+      if (f.artScene.paint) {
+        // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
+        g.globalAlpha = 0.78; g.filter = 'brightness(0.78) saturate(0.95)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+      } else {
+        g.globalAlpha = 0.34; g.filter = 'brightness(0.72) saturate(0.9)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
+        g.globalAlpha = 0.62; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
+      }
       // a clear margin round the figure
       g.globalCompositeOperation = 'destination-out'; g.filter = `blur(${Math.round(7 * D)}px)`; g.drawImage(img, ox, oy, bw, bh); g.drawImage(img, ox, oy, bw, bh); g.filter = 'none';
       // a soft oval round him, and out at the bottom with the figure
