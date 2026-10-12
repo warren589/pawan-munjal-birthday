@@ -67,7 +67,7 @@
     VOCAB.forEach(v => { const n = !code ? 1 : v.facets.has(code) ? 3 : 0; for (let k = 0; k < n; k++) words.push({ t: v.w, m: forWord(v.w, code, R) }); });
     const S = window.STUDIO;
     return (specs[state] = f
-      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, headWeight: f.headWeight, strokes: f.strokes, ink: f.ink, words, seed: 100 + fi }
+      ? { key: 'f' + fi, code, img: f.img, heads: f.heads, headScale: f.headScale, headWeight: f.headWeight, strokes: f.strokes, trueColor: f.trueColor, ink: f.ink, words, seed: 100 + fi }
       : { key: state, code: null, img: S.img, heads: S.heads, ink: S.ink, inks: null, words, seed: state === 'hero' ? 11 : 99 });
   }
 
@@ -703,6 +703,20 @@
     addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
     addEventListener('resize', () => { last = -1; draw(); });
     draw();
+  })();
+
+  // ---------------- the painted ground: drifts slowly upwards over the length of the page ----------------
+  (() => {
+    const g = $('.ground'), root = document.documentElement; let raf = 0, gh = 0;
+    const size = () => { gh = Math.round(Math.max(innerHeight * 1.7, innerWidth * 2600 / 1400)); root.style.setProperty('--gh', gh + 'px'); };
+    const draw = () => {
+      raf = 0;
+      const max = Math.max(1, root.scrollHeight - innerHeight), p = Math.min(1, scrollY / max);
+      root.style.setProperty('--gy', (-p * (gh - innerHeight)).toFixed(1) + 'px');
+    };
+    addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
+    addEventListener('resize', () => { size(); draw(); });
+    size(); draw();
   })();
 
   // ---------------- boot ----------------

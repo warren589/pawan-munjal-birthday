@@ -13,10 +13,10 @@ window.FACETS = [
     line: "On the course, as in life: patience first, then precision.",
     anchor: [0.42, 0.79],   // the detail the note's line points to
     story: ["The same qualities show up on the green as in the boardroom: a steady swing, a competitor\u2019s focus and a deep respect for fair play.", "Partners remember the calm before a difficult putt, and the generosity after it, win or lose."] },
-  { code: 'F', name: 'Family Man', short: 'Family', img: 'family', headScale: 1.3, heads: [[0.147, 0.192, 0.052, 0.098], [0.258, 0.213, 0.048, 0.092], [0.408, 0.116, 0.06, 0.124], [0.58, 0.208, 0.052, 0.098], [0.712, 0.271, 0.048, 0.092], [0.825, 0.199, 0.052, 0.098]],
+  { code: 'F', name: 'Family Man', short: 'Family', img: 'family', trueColor: true, headScale: 1.35, headWeight: 700, heads: [[0.156, 0.243, 0.03, 0.097], [0.3, 0.195, 0.03, 0.099], [0.405, 0.367, 0.027, 0.09], [0.511, 0.25, 0.03, 0.099], [0.616, 0.43, 0.027, 0.09], [0.731, 0.36, 0.027, 0.094], [0.846, 0.14, 0.03, 0.099], [0.585, 0.733, 0.025, 0.076], [0.769, 0.519, 0.026, 0.083], [0.372, 0.616, 0.033, 0.083]],   // the family painting: its words keep the painting's colours
     ink: ['#BF5B76', '#4b2931'],
     line: "Before every title, he is a father, a husband and a grandfather.",
-    anchor: [0.84, 0.32],   // the detail the note's line points to
+    anchor: [0.511, 0.36],   // the detail the note's line points to: him, at the centre of them all
     story: ["The values he carries into every boardroom were shaped at home, and are still kept there.", "Family members describe a man who listens first, laughs easily and is never too busy to be present."] },
   { code: 'M', name: 'Mentor', short: 'Mentor', img: 'mentor', headScale: 1.1, headWeight: 600, heads: [[0.175, 0.203, 0.073, 0.145], [0.471, 0.151, 0.064, 0.145], [0.824, 0.221, 0.064, 0.156]],
     ink: ['#C9A227', '#594919'],
