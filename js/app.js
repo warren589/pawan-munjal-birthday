@@ -147,7 +147,7 @@
       const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
       let w, h, left, top;
-      if (MOBILE.matches) { h = H; w = h * ar; left = Math.max(0, (vw - w) / 2); top = hdr + 2; }   // wider than the screen: it pans
+      if (MOBILE.matches) { h = H; w = h * ar; if (w > vw * 1.8) { w = vw * 1.8; h = w / ar; } left = Math.max(0, (vw - w) / 2); top = hdr + 2 + (H - h); }   // a wide group: at most a little wider than the screen, standing where the portraits stand
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
         const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
@@ -156,11 +156,13 @@
       }
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
-      sceneOn = !!scn && !MOBILE.matches;
+      sceneOn = !!scn;
       if (scn) {
         // the scene's place, cut to the screen
-        const a = f.artScene, l = Math.max(0, left + a.x * box.w), t = Math.max(0, top + a.y * box.h);
-        const r = Math.min(vw, left + (a.x + a.w) * box.w), b = Math.min(vh, top + (a.y + a.h) * box.h);
+        // the scene's place, cut to the screen (on a phone only top and bottom: it pans sideways with the painting)
+        const a = f.artScene, mob = MOBILE.matches, l0 = left + a.x * box.w, r0 = left + (a.x + a.w) * box.w;
+        const l = mob ? Math.max(l0, left - vw * 0.5) : Math.max(0, l0), t = Math.max(mob ? hdr : 0, top + a.y * box.h);
+        const r = mob ? Math.min(r0, left + box.w + vw * 0.5) : Math.min(vw, r0), b = Math.min(vh, top + (a.y + a.h) * box.h);
         sbox = { left: l, top: t, w: Math.max(1, Math.round(r - l)), h: Math.max(1, Math.round(b - t)) };
         Object.assign(scn.style, { left: l + 'px', top: t + 'px', width: sbox.w + 'px', height: sbox.h + 'px', display: sceneOn ? '' : 'none' });
       }
@@ -193,7 +195,7 @@
       if (ix + iw < W2 + ex) edge(ix + iw, 0, ix + iw - ex, 0);
       if (iy > -ey) edge(0, iy, 0, iy + ey);
       // and the oval stays clear of the screen's edge
-      const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = (box.left + box.w / 2) * D;
+      const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * D;
       // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
       const rx = Math.min(bw * 0.44 + bh * 0.4, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min(bh * 0.56 + bw * 0.12, Math.min(cy - iy, iy + ih - cy) * 1.08);
       g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
@@ -413,10 +415,13 @@
     }
     // on a phone a painting wider than the screen pans across as you scroll through its section
     function pan() {
+      // a gentle sweep: from a little left of centre to a little right of it, never edge to edge
+      let tr = 'none';
       if (MOBILE.matches && box && box.w > innerWidth) {
-        const r = sec().getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
-        el.style.transform = `translateX(${(-(box.w - innerWidth) * p).toFixed(1)}px)`;
-      } else el.style.transform = 'none';
+        const r = sec().getBoundingClientRect(), p = smooth(0.15, 0.85, (innerHeight * 0.5 - r.top) / r.height);
+        tr = `translateX(${(-(box.w - innerWidth) * (0.3 + 0.4 * p)).toFixed(1)}px)`;
+      }
+      el.style.transform = tr; if (scn) scn.style.transform = tr;
     }
     // while its words are travelling to or from another facet: only the painting's faint ground, at presence p
     function ground(p) {
@@ -1041,7 +1046,7 @@
   const board = (() => {
     const yearNav = document.createElement('nav'); yearNav.className = 'wyears'; yearNav.setAttribute('aria-label', 'Messages by year'); document.body.appendChild(yearNav);
     const sec = $('.wall'), pin = $('.wall__pin'), stage = $('.wall__stage'), cardsEl = $('.wall__cards'), head = $('.wall__head'), rest = $('.wall__rest');
-    const HOLD = 0.4, MORPH = 1.0;            // viewport heights: scattered and held, then the move into the grid
+    let HOLD = 0.4, MORPH = 1.0;              // viewport heights: scattered and held, then the move into the grid (phones: neither, the board straight away)
     let cards = [], heads = [], itemYears = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0, mob = false, side = 0;
     const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
@@ -1094,7 +1099,9 @@
       const cw = Math.floor((vw - side * 2 - gap * (cols - 1)) / cols);
       stage.style.height = vh + 'px';
       cards.forEach(c => { c.el.style.width = cw + 'px'; c.el.style.transform = 'none'; });
-      gTop = hdr + (mob ? 28 : 56);
+      HOLD = mob ? 0 : 0.4; MORPH = mob ? 0 : 1.0;
+      sec.classList.toggle('direct', mob);
+      gTop = mob ? hdr + 20 + head.offsetHeight + 34 : hdr + 56;   // phones: the title, then the board
       const colX = Array.from({ length: cols }, (_, k) => side + k * (cw + gap)), colH = colX.map(() => 0);
       const rates = [-0.05, 0.04, -0.03, 0.05];
       // a year heading opens each group, across the whole width; the group's letters then fill the columns below it
@@ -1139,7 +1146,7 @@
     function draw() {
       raf = 0;
       const r = sec.getBoundingClientRect(), s = -r.top;
-      const p = clamp01((s - vh * HOLD) / (vh * MORPH));
+      const p = MORPH ? clamp01((s - vh * HOLD) / (vh * MORPH)) : 1;
       const after = Math.max(0, s - vh * (HOLD + MORPH));   // scroll since the stage let go: drives the column drift
       for (const c of cards) {
         let e, a = 1;
@@ -1177,7 +1184,7 @@
       });
       // the year navigation rides on the heading row: level with the first heading, then held under the page header
       if (heads.length) {
-        const top = Math.max(hdr + 6, gTop + heads[0].y - after) + (1 - ha) * 20, on = ha > 0.05 && r.bottom > vh * 0.35;
+        const top = Math.max(hdr + 6, gTop + heads[0].y - after) + (1 - ha) * 20, on = ha > 0.05 && r.top < vh * 0.5 && r.bottom > vh * 0.35;   // only while the board is on screen
         let cur = 0; heads.forEach((h, i) => { if (gTop + h.y - after <= hdr + 60) cur = i; });
         yearNav.style.transform = `translateY(${top.toFixed(1)}px)`; yearNav.style.right = side + 'px';
         yearNav.style.opacity = on ? ha : 0; yearNav.classList.toggle('on', on && ha > 0.6);
@@ -1186,8 +1193,8 @@
           $$('button', yearNav).forEach((b, i) => { b.classList.toggle('cur', i === cur); if (i === cur) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
         }
       }
-      head.style.opacity = 1 - Math.min(1, p * 2.4);
-      head.style.visibility = p > 0.45 ? 'hidden' : '';
+      head.style.opacity = MORPH ? 1 - Math.min(1, p * 2.4) : 1;
+      head.style.visibility = MORPH && p > 0.45 ? 'hidden' : '';
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
       const covered = r.top <= 0 && r.bottom >= vh; if (covered !== body.classList.contains('stage-covered')) { body.classList.toggle('stage-covered', covered); if (!covered) kick(); }
     }

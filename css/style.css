@@ -178,6 +178,10 @@ body.on-board .rail, body.on-board .findpill { opacity: 0; pointer-events: none;
   .wcard__body { padding: 22px 22px 20px; }
   .wcard__t { font-size: 16px; }
   .wall__head h2 { font-size: 46px; }
+  /* phones: no scattered opening, the title sits at the top of the board */
+  .wall.direct .wall__head { inset: calc(var(--hdr) + 20px) 0 auto; display: block; padding: 0 18px; text-align: left; }
+  .wall.direct .wall__head::before { display: none; }
+  .wall.direct .wall__head h2 { font-size: 40px; margin-bottom: 8px; }
 }
 /* ---------- footer ---------- */
 .foot { text-align: center; padding: 40px 0 60px; font: 400 11px var(--sans); letter-spacing: 0.087em; text-transform: uppercase; color: var(--muted); }
