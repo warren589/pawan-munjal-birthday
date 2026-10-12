@@ -184,7 +184,7 @@
       g.clearRect(0, 0, W2, H2);
       if (f.artScene.paint) {
         // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
-        g.globalAlpha = 0.84; g.filter = 'brightness(0.88) saturate(1)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+        g.globalAlpha = 0.84; g.filter = `brightness(0.88) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
       } else {
         g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
         g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
@@ -202,9 +202,11 @@
       // and the oval stays clear of the screen's edge
       const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * D;
       // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
-      const rx = Math.min(bw * 0.44 + bh * 0.4, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min(bh * 0.56 + bw * 0.12, Math.min(cy - iy, iy + ih - cy) * 1.08);
+      // oval: [how much larger, how far out it stays solid] — larger and flatter reads less as a spotlight
+      const [grow, solidTo] = f.artScene.oval || [1, 0.5];
+      const rx = Math.min((bw * 0.44 + bh * 0.4) * grow, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min((bh * 0.56 + bw * 0.12) * grow, Math.min(cy - iy, iy + ih - cy) * 1.08);
       g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
-      const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(0.5, 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(solidTo, solidTo > 0.5 ? '#000' : 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = rg; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.restore();
       const fy0 = oy + bh * (f.artFade || 0.86) - bh * 0.1, lg = g.createLinearGradient(0, fy0, 0, oy + bh); lg.addColorStop(0, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = lg; g.fillRect(0, 0, W2, H2);   // whole canvas: the gradient holds solid above the fade and clear below it
@@ -305,7 +307,7 @@
         for (let y = q.cy - q.hh + fsI * CAP; y < q.cy + q.hh + stepI; y += stepI) line(fsI, y, q.cx - q.hw, q.cx + q.hw, false, false, 'i');
       });
       // the faces: their own finer rows, only where a face is
-      const fsF = body * 0.56, stepF = fsF * CAP + fsF * 0.1;
+      const fsF = body * (f.artFaceScale || 0.56), stepF = fsF * CAP + fsF * 0.1;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
         const yc = y - fsF * CAP / 2, spans = [];
         faces.forEach(([a, b, rx, ry]) => { const e = (yc - b) / (ry * 1.15); if (Math.abs(e) < 1) { const hw = rx * 1.15 * Math.sqrt(1 - e * e); spans.push([a - hw - fsF * 2, a + hw + fsF * 2]); } });
@@ -345,7 +347,7 @@
       // a copy of the letter rows in full, for the hover highlight; the picture itself shows them only inside the letters
       const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
       ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
-      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.03) saturate(1.2)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = `brightness(1.03) saturate(${f.artSat || 1.2})`; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
       // a floor under the words' colour: words on dark clothes stay legible against the dark ground instead of vanishing
       for (const [c0, g] of [[bc, bg], [fc, fg]]) {
         const [flc, flg] = mk(); flg.fillStyle = 'rgb(108, 103, 100)'; flg.fillRect(0, 0, cw, ch); flg.globalCompositeOperation = 'destination-in'; flg.drawImage(c0, 0, 0);
@@ -512,9 +514,9 @@
     return api;
   };
   const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(String(i), f, i); });
-  if (window.HERO_ART) {   // the opening and closing portraits are the same painting, with their own words
+  if (window.HERO_ART) {   // the opening and closing portraits: paintings of their own
     ARTS.hero = makeArt('hero', window.HERO_ART, 11);
-    ARTS.final = makeArt('final', { ...window.HERO_ART, feature: window.HERO_ART.finalFeature || window.HERO_ART.feature }, 12);
+    ARTS.final = makeArt('final', window.FINAL_ART || { ...window.HERO_ART, feature: window.HERO_ART.finalFeature || window.HERO_ART.feature }, 12);
   }
   const ART_LIST = Object.values(ARTS);
   const isArt = s => !!ARTS[s];
