@@ -674,6 +674,28 @@
     return { added };
   })();
 
+  // ---------------- splash: lifts away like a curtain over the opening portrait ----------------
+  // It scrolls up with the page; inside it the figure trails behind and the words and logos drift and fade, so it
+  // reads as a layer being lifted rather than a block sliding off. The opening portrait waits underneath.
+  (() => {
+    const sp = $('.splash'); if (!sp) return;
+    let raf = 0, last = -1;
+    const draw = () => {
+      raf = 0;
+      const vh = sp.offsetHeight, s = Math.min(scrollY, vh);
+      if (s === last) return; last = s;
+      const p = s / vh, still = REDUCED.matches;
+      sp.style.setProperty('--fy', (still ? 0 : s * 0.42).toFixed(1) + 'px');
+      sp.style.setProperty('--wy', (still ? 0 : s * 0.18).toFixed(1) + 'px');
+      sp.style.setProperty('--wo', Math.max(0, 1 - p * 1.8).toFixed(3));
+      sp.style.setProperty('--dim', (p * 0.55).toFixed(3));
+      sp.style.visibility = s >= vh ? 'hidden' : '';
+    };
+    addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
+    addEventListener('resize', () => { last = -1; draw(); });
+    draw();
+  })();
+
   // ---------------- boot ----------------
   (async function boot() {
     await Promise.race([Promise.all([document.fonts.load('400 20px "Archivo Narrow"'), document.fonts.load('700 20px "Archivo Narrow"')]).catch(() => {}),
@@ -682,7 +704,7 @@
     geometry();
     // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
     // the shuffles between them); the rest is prepared in the background once the page is open
-    const bar = $('.loader__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
+    const bar = $('.splash__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
     // every portrait and every shuffle between neighbours; if a slow device takes too long, the page opens anyway and
     // the rest carries on in the background
     const all = run(jobsFor(order), 150, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
@@ -690,6 +712,5 @@
     ready = true; kick();
     await new Promise(r => setTimeout(r, 250));
     body.classList.add('ready'); body.classList.remove('booting'); kick();
-    setTimeout(() => { const l = $('.loader'); if (l) l.remove(); }, 900);
   })();
 })();
