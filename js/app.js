@@ -189,6 +189,17 @@
         g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
         g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
       }
+      // artHalo: the painting settles back right round him (softer, quieter, a shade darker), so he stands in front of it
+      const hl2 = f.artScene.halo;
+      if (hl2) {
+        const R = Math.round(bh * (hl2.reach || 0.07)), hm = document.createElement('canvas'); hm.width = W2; hm.height = H2;
+        const hx = hm.getContext('2d'); hx.filter = `blur(${R}px)`; for (let k = 0; k < 3; k++) hx.drawImage(img, ox, oy, bw, bh); hx.filter = 'none';
+        const soft = document.createElement('canvas'); soft.width = W2; soft.height = H2; const sx3 = soft.getContext('2d');
+        sx3.filter = `blur(${Math.round((hl2.blur || 0) * D)}px) saturate(${1 - (hl2.desat || 0)}) brightness(${0.88 * (1 - (hl2.dark || 0))})`;
+        sx3.drawImage(simg, ix, iy, iw, ih); sx3.filter = 'none';
+        sx3.globalCompositeOperation = 'destination-in'; sx3.drawImage(hm, 0, 0);
+        g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.84; g.drawImage(soft, 0, 0); g.globalAlpha = 1;
+      }
       // a clear margin round the figure
       g.globalCompositeOperation = 'destination-out'; g.filter = `blur(${Math.round(7 * D)}px)`; g.drawImage(img, ox, oy, bw, bh); g.drawImage(img, ox, oy, bw, bh); g.filter = 'none';
       // a soft oval round him, and out at the bottom with the figure
@@ -357,7 +368,7 @@
       // a copy of the letter rows in full, for the hover highlight; the picture itself shows them only inside the letters
       const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
       ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
-      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = `brightness(1.03) saturate(${f.artSat || 1.2})`; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = `brightness(1.03) saturate(${f.artSat || 1.2}) contrast(${f.artContrast || 1})`; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
       // a floor under the words' colour: words on dark clothes stay legible against the dark ground instead of vanishing
       for (const [c0, g] of [[bc, bg], [fc, fg]]) {
         const [flc, flg] = mk(); flg.fillStyle = 'rgb(108, 103, 100)'; flg.fillRect(0, 0, cw, ch); flg.globalCompositeOperation = 'destination-in'; flg.drawImage(c0, 0, 0);
@@ -368,7 +379,8 @@
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.14; g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.globalAlpha = 1;
       }
       // the brushwork under the words, on the family only
-      const [uc, ug] = mk(); ug.globalAlpha = 0.48; ug.filter = 'saturate(1.12)'; ug.drawImage(img, 0, 0, cw, ch); ug.filter = 'none'; ug.globalAlpha = 1;
+      // artUnder: how solidly the figure's own painting shows between the words
+      const [uc, ug] = mk(); ug.globalAlpha = f.artUnder || 0.48; ug.filter = `saturate(1.12) contrast(${f.artContrast || 1})`; ug.drawImage(img, 0, 0, cw, ch); ug.filter = 'none'; ug.globalAlpha = 1;
       // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
       const [sc, sg] = mk(); sg.font = font(body * 0.8);
       for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.92) { let px = -R() * body * 3; while (px < cw) { const t = pick(); sg.fillText(t, px, y); px += widthOf(t, body * 0.8) + body * 0.17; } }
