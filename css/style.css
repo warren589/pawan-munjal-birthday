@@ -73,7 +73,7 @@ body.on-splash .top, body.on-splash .note { pointer-events: none !important; }
 .portrait { display: block; }
 .famart { position: absolute; left: 0; z-index: 2; pointer-events: none; opacity: 0; visibility: hidden; }
 /* the family: the painting on the left, a little wider than the portraits; the text on the right in a bold condensed sans */
-#facet-2 .note { left: 66vw; width: min(380px, 28vw); }
+#facet-2 .note { left: 67vw; width: min(380px, 27vw); }
 #facet-2 .fline { font: 700 clamp(30px, 2.6vw, 44px)/1.04 var(--narrow); letter-spacing: -.005em; margin-bottom: 14px; }
 #facet-2 .story p { font: 400 15px/1.55 var(--sans); }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }

@@ -120,25 +120,29 @@
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
 
   // ---------------- the family: the painting itself, set in words ----------------
-  // One facet is shown differently. Instead of a cut-out portrait, the family painting appears in its own colours,
-  // made of rows of small words (finer across the faces, so each one stays recognisable), with the painting's
-  // brushwork faintly between the letters and its background toned down. On desktop a handful of larger words for
-  // this facet are set into the family's clothes, so some of it can be read at a glance. Scrolling in or out, the
-  // painting comes apart into its words, which drift off and fade (and gather again on the way back).
-  // Desktop: on the left, the text on the right, as with every facet. Phone: as tall as the portraits, panning across.
+  // One facet is shown differently. The family is cut out of the painting and set in tightly packed rows of small words
+  // in the painting's own colours (finer across the faces, so each one stays recognisable), with the brushwork faintly
+  // between the letters. Its background is only a faint trace, as with the other portraits. On desktop a few larger
+  // words for this facet sit on the same row grid, set into the family's clothes. The group stands on the bottom edge
+  // of the screen like every portrait, text on the right. Scrolling in or out, it comes apart into its words.
+  // Phone: as tall as the portraits, panning across the family as you scroll.
   const ART = (() => {
     const fi = FACETS.findIndex(f => f.art); if (fi < 0) return null;
     const f = FACETS[fi], state = String(fi), el = $('.famart'), x = el.getContext('2d'), root = document.documentElement;
-    const img = new Image(), mimg = new Image();
-    let built = '', box = null, shown = -1, words = [], under = null, layer = null, D = 1;
-    img.src = f.art; mimg.src = f.artMask;
-    const loaded = Promise.all([img.decode(), mimg.decode()]).catch(() => {});
+    const img = new Image(), mimg = new Image(), bimg = new Image();
+    let built = '', box = null, shown = -1, words = [], under = null, layer = null, scene = null, D = 1;
+    img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
+    const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode()]).catch(() => {});
+    // the painting file is cropped to the family: x from 50 to 1920 of the original 2000 × 733
+    const CX0 = 50 / 2000, CXW = 1870 / 2000;
+    const toCrop = u => (u - CX0) / CXW;
     function place() {
-      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 2000 / 733;
+      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1870 / 733;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
-      let w, h, top, left;
-      if (MOBILE.matches) { h = H; w = h * ar; top = hdr + 2; left = 0; }
-      else { w = Math.min(vw * 0.6, (vh - hdr - 60) * ar); h = w / ar; left = vw * 0.025; top = hdr + (vh - hdr - h) / 2; }
+      let w, h, left;
+      if (MOBILE.matches) { h = H; w = h * ar; left = 0; }
+      else { w = Math.min(vw * 0.62, (vh - hdr - 40) * ar); h = w / ar; left = vw * 0.02; }
+      const top = MOBILE.matches ? hdr + 2 : vh - h;   // desktop: standing on the bottom edge, like every portrait
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
       shown = -1;
@@ -150,64 +154,69 @@
       if (key === built) return; built = key;
       el.width = cw; el.height = ch;
       const R = seeded(fi * 31 + 7), pool = spec(state).words.map(w => w.t.toUpperCase());
-      // where the family is (a small mask made with the painting), and where the faces are
       const mc = document.createElement('canvas'); mc.width = mimg.naturalWidth; mc.height = mimg.naturalHeight;
       const mx = mc.getContext('2d'); mx.drawImage(mimg, 0, 0); const md = mx.getImageData(0, 0, mc.width, mc.height).data;
-      const onFamily = (px, py) => { const i = (Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4; return md[i] > 160; };
+      const onFamily = (px, py) => { const i = (Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4; return md[i] > 90; };
       const ex = 65 / 2000, ey = 9 / 733, sx = 1830 / 2000, sy = 724 / 733;
-      const faces = f.heads.map(([hx, hy, rx, ry]) => [(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx * cw * 1.3, ry * sy * ch * 1.25]);
+      const faces = f.heads.map(([hx, hy, rx, ry]) => [toCrop(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx / CXW * cw * 1.3, ry * sy * ch * 1.25]);
       const inFace = (px, py, pad = 1) => faces.some(([a, b, rx, ry]) => ((px - a) / (rx * pad)) ** 2 + ((py - b) / (ry * pad)) ** 2 < 1);
-      const t = document.createElement('canvas'); t.width = cw; t.height = ch;
-      const tx = t.getContext('2d'); tx.fillStyle = '#fff'; tx.textBaseline = 'alphabetic';
       const font = fs => `700 ${fs}px ${window.WP_FONT}`;
+      const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; return [c, g]; };
+      // one row grid for everything: small words on every line, larger words spanning several lines exactly
+      const body = ch / (mob ? 72 : 66), step = body * 0.84, gap = body * 0.2, y0 = body * 0.78;
+      const [t, tx] = mk();
       words = [];
-      // the larger words first (desktop): a few sizes, on the family's clothes, never over a face or each other
-      const big = [], body = ch / (mob ? 74 : 70);
-      if (!mob) {
-        const sizes = [5.2, 4.4, 3.8, 3.3, 3, 2.7, 2.5, 2.3, 2.1, 2, 1.9, 1.8, 1.7, 1.7];
-        (f.feature || []).forEach((t0, k) => {
-          const fs = body * (sizes[k] || 1.7); tx.font = font(fs); const w = tx.measureText(t0).width, hh = fs * 0.74;
-          for (let tries = 0; tries < 500; tries++) {
-            const px = cw * 0.07 + R() * (cw * 0.86 - w), py = ch * 0.1 + hh + R() * (ch * 0.8 - hh);   // clear of the faded edges
-            const pts = [[px, py], [px + w, py], [px, py - hh], [px + w, py - hh], [px + w / 2, py - hh / 2], [px + w / 4, py - hh / 2], [px + w * 0.75, py - hh / 2]];
-            if (!pts.every(([a, b]) => onFamily(a, b) && !inFace(a, b, 1.15))) continue;
-            const pad = fs * 0.12, r = [px - pad, py - hh - pad, px + w + pad, py + pad];
-            if (big.some(q => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1])) continue;
-            big.push(r); words.push({ t: t0, x: px, y: py, w, fs, big: true }); break;
-          }
-        });
-      }
-      const blocked = (a, b, w, fs) => big.some(q => a < q[2] && a + w > q[0] && b - fs * 0.8 < q[3] && b > q[1]);
-      // then rows of small words everywhere else, finer across the faces
-      const rows = (fs, clip) => {
-        tx.font = font(fs);
-        for (let y = fs * 0.8; y < ch + fs; y += fs * 0.92) {
+      const big = [];
+      if (!mob) (f.feature || []).forEach(([w0, u, v, maxW]) => {
+        const cxp = toCrop(u) * cw, mw = maxW / CXW * cw;
+        for (let n = 7; n >= 2; n--) {
+          const fs = (n * step - step * 0.2) / 0.72;   // cap height fills n rows, less one row's gap
+          tx.font = font(fs); const w = tx.measureText(w0).width;
+          if (w > mw) continue;
+          const k = Math.round((v * ch + n * step / 2 - y0) / step), by = y0 + k * step, px = cxp - w / 2, top = by - fs * 0.72;
+          let fits = true;   // every part of the word on the family, and clear of every face
+          for (let i = 0; i <= 8 && fits; i++) { const qx = px + w * i / 8; for (const qy of [top, by - fs * 0.36, by]) if (!onFamily(qx, qy) || inFace(qx, qy)) { fits = false; break; } }
+          if (!fits) continue;
+          big.push([px - gap * 0.6, top - step * 0.1, px + w + gap * 0.6, by + step * 0.05]);
+          words.push({ t: w0, x: px, y: by, w, fs, big: true });
+          break;
+        }
+      });
+      const blocked = (a, b, w, fs) => big.some(q => a < q[2] && a + w > q[0] && b - fs * 0.72 < q[3] && b > q[1]);
+      const rows = (fs, st, keep, out, onlyFamily) => {
+        out.font = font(fs);
+        for (let y = fs * 0.78; y < ch + fs; y += st) {
           let px = -R() * fs * 4;
           while (px < cw) {
-            const w0 = pool[(R() * pool.length) | 0], w = tx.measureText(w0).width;
-            if (clip(px + w / 2, y - fs * 0.35) && !blocked(px, y, w, fs)) words.push({ t: w0, x: px, y, w, fs });
-            px += w + fs * 0.26;
+            const w0 = pool[(R() * pool.length) | 0], w = out.measureText(w0).width, mxp = px + w / 2, myp = y - fs * 0.36;
+            if (keep(mxp, myp) && !blocked(px, y, w, fs) && (!onlyFamily || onFamily(mxp, myp) || onFamily(px, myp) || onFamily(px + w, myp))) words.push({ t: w0, x: px, y, w, fs });
+            px += w + fs * 0.2;
           }
         }
       };
-      rows(body, (a, b) => !inFace(a, b));
-      rows(body * 0.56, (a, b) => inFace(a, b));
+      rows(body, step, (a, b) => !inFace(a, b), tx, true);
+      rows(body * 0.66, body * 0.66 * 0.86, (a, b) => inFace(a, b), tx, true);
       words.forEach(w => { tx.font = font(w.fs); tx.fillText(w.t, w.x, w.y); });
-      // coloured by the painting; the larger words a little brighter so they read
+      // coloured by the cut-out painting: the words keep its colours and end exactly on the family's outline
       tx.globalCompositeOperation = 'source-in'; tx.filter = 'brightness(1.12) saturate(1.08)'; tx.drawImage(img, 0, 0, cw, ch); tx.filter = 'none';
-      tx.globalCompositeOperation = 'source-atop'; tx.globalAlpha = 0.2; tx.fillStyle = '#fff';
+      tx.globalCompositeOperation = 'source-atop'; tx.globalAlpha = 0.1; tx.fillStyle = '#fff';
       words.forEach(w => { if (w.big) tx.fillRect(w.x - 2, w.y - w.fs, w.w + 4, w.fs * 1.1); });
-      tx.globalAlpha = 1;
-      // the edges melt into the ground: words and painting alike
-      const fadeEdges = c => {
-        const g2 = c.getContext('2d'); g2.globalCompositeOperation = 'destination-in';
-        const fade = (x0, y0, x1, y1, a, b) => { const g = g2.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(a, '#000'); g.addColorStop(b, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)'); g2.fillStyle = g; g2.fillRect(0, 0, cw, ch); };
-        fade(0, 0, cw, 0, 0.05, 0.95); fade(0, 0, 0, ch, 0.06, 0.93); g2.globalCompositeOperation = 'source-over';
-      };
-      fadeEdges(t);
-      under = document.createElement('canvas'); under.width = cw; under.height = ch;
-      const ux = under.getContext('2d'); ux.globalAlpha = 0.5; ux.drawImage(img, 0, 0, cw, ch);   // the painting itself carries much of it fadeEdges(under);
+      tx.globalAlpha = 1; tx.globalCompositeOperation = 'source-over';
       layer = t;
+      // the brushwork under the words, on the family only
+      under = document.createElement('canvas'); under.width = cw; under.height = ch;
+      const ux = under.getContext('2d'); ux.globalAlpha = 0.42; ux.drawImage(img, 0, 0, cw, ch);
+      // the surroundings: a faint field of smaller words in the background's muted colours, fading out at the edges
+      const [sc, sg] = mk(); const sR = R;
+      sg.font = font(body * 0.8);
+      for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.9) { let px = -sR() * body * 3; while (px < cw) { const w0 = pool[(sR() * pool.length) | 0]; sg.fillText(w0, px, y); px += sg.measureText(w0).width + body * 0.16; } }
+      sg.globalCompositeOperation = 'source-in'; sg.drawImage(bimg, 0, 0, cw, ch);
+      sg.globalCompositeOperation = 'destination-out'; sg.filter = `blur(${Math.round(6 * D)}px)`; sg.drawImage(img, 0, 0, cw, ch); sg.drawImage(img, 0, 0, cw, ch); sg.filter = 'none';
+      sg.globalCompositeOperation = 'destination-in';
+      const fade = (x0, y0_, x1, y1, a, b2) => { const g = sg.createLinearGradient(x0, y0_, x1, y1); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(a, '#000'); g.addColorStop(b2, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)'); sg.fillStyle = g; sg.fillRect(0, 0, cw, ch); };
+      fade(0, 0, cw, 0, 0.18, 0.82); fade(0, 0, 0, ch, 0.3, 1);
+      sg.globalCompositeOperation = 'source-over';
+      scene = sc;
       // each word's journey when the painting comes apart: a drift up and to the side, the large words last
       words.forEach(w => {
         const a = -Math.PI * (0.25 + R() * 0.5) + (R() - 0.5) * 0.6;
@@ -221,6 +230,7 @@
       const cw = el.width, ch = el.height;
       x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch);
       if (!layer) return;
+      x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(scene, 0, 0);
       x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(under, 0, 0);
       if (q <= 0) { x.globalAlpha = 1; x.drawImage(layer, 0, 0); return; }
       for (const w of words) {
