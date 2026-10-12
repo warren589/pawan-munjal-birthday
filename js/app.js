@@ -127,6 +127,8 @@
   // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
   // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
+  const WORD_SCALE = 1.5;      // the paintings' words, relative to each painting's row count (artRows)
+  const LARGE_WORDS = false;   // larger words formed inside the paintings (feature lists in data.js); off: every word one size
   const makeArt = (state, f, fi) => {
     const root = document.documentElement, sec = () => $(`.flow [data-state="${state}"]`);
     const el = document.createElement('canvas'), x = el.getContext('2d');
@@ -201,14 +203,15 @@
       }
 
       // the row grid: every line the same height
-      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64), step = body * CAP + body * 0.14, y0 = body * CAP;
+      // every word one size (faces a little finer, so they stay recognisable), set large enough to read
+      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64) * WORD_SCALE, step = body * CAP + body * 0.14, y0 = body * CAP;
       // The larger words (desktop) are not laid over the picture: their letters are made of the small words themselves,
       // set finer and closer inside each letter and a step brighter, with the words just round the letters dimmed a little,
       // so a word appears out of the texture from a distance and is all small words close up. One main word per picture,
       // a few at a medium size, each tilted with the body where that helps.
       // feature: [word, centre x, centre y, widest it may be (fractions of the picture), most rows tall, tilt in degrees]
       const big = [];
-      if (!mob) for (const [t, u, v, maxW, maxRows = 7, deg = 0] of f.feature || []) {
+      if (!mob && LARGE_WORDS) for (const [t, u, v, maxW, maxRows = 7, deg = 0] of f.feature || []) {
         const cx = u * cw, cy = v * ch, mw = maxW * cw, ang = deg * Math.PI / 180, ca = Math.cos(ang), sa = Math.sin(ang);
         for (let n = maxRows; n >= 2; n--) {
           const fs = ((n - 1) * step + body * CAP) / CAP, w = widthOf(t, fs), capH = fs * CAP;
@@ -244,7 +247,7 @@
         for (let y = q.cy - q.hh + fsI * CAP; y < q.cy + q.hh + stepI; y += stepI) line(fsI, y, q.cx - q.hw, q.cx + q.hw, false, false, 'i');
       });
       // the faces: their own finer rows, only where a face is
-      const fsF = body * 0.66, stepF = fsF * CAP + fsF * 0.14;
+      const fsF = body * 0.8, stepF = fsF * CAP + fsF * 0.14;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
         const yc = y - fsF * CAP / 2, spans = [];
         faces.forEach(([a, b, rx, ry]) => { const e = (yc - b) / (ry * 1.15); if (Math.abs(e) < 1) { const hw = rx * 1.15 * Math.sqrt(1 - e * e); spans.push([a - hw - fsF * 2, a + hw + fsF * 2]); } });
