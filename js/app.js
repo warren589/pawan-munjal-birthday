@@ -127,7 +127,7 @@
   // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
   // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
-  const WORD_SCALE = 1.5;      // the paintings' words, relative to each painting's row count (artRows)
+  const WORD_SCALE = 1.7, WORD_SCALE_MOBILE = 1.15;   // the paintings' words, relative to each painting's row count (artRows); phones' pictures are smaller
   const LARGE_WORDS = false;   // larger words formed inside the paintings (feature lists in data.js); off: every word one size
   const makeArt = (state, f, fi) => {
     const root = document.documentElement, sec = () => $(`.flow [data-state="${state}"]`);
@@ -181,7 +181,7 @@
       // both sides tight the words are chosen to fill the space, then spaced (and at most very slightly widened or
       // narrowed) so the line runs exactly from one to the other.
       function line(fs, y, a, b, tightA, tightB, tag) {
-        const space = fs * 0.22, put = (t, px, s) => words.push({ t, x: px, y, w: widthOf(t, fs) * s, fs, s, tag });
+        const space = fs * 0.15, put = (t, px, s) => words.push({ t, x: px, y, w: widthOf(t, fs) * s, fs, s, tag });
         if (!tightA && !tightB) { let px = a - R() * fs * 4; while (px < b) { const t = pick(); put(t, px, 1); px += widthOf(t, fs) + space; } return; }
         if (tightA && !tightB) { let px = a; while (px < b) { const t = pick(); put(t, px, 1); px += widthOf(t, fs) + space; } return; }
         if (!tightA) { let px = b; while (px > a) { const t = pick(), w = widthOf(t, fs); px -= w; put(t, px, 1); px -= space; } return; }
@@ -204,7 +204,7 @@
 
       // the row grid: every line the same height
       // every word one size (faces a little finer, so they stay recognisable), set large enough to read
-      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64) * WORD_SCALE, step = body * CAP + body * 0.14, y0 = body * CAP;
+      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64) * (mob ? WORD_SCALE_MOBILE : WORD_SCALE), step = body * CAP + body * 0.1, y0 = body * CAP;
       // The larger words (desktop) are not laid over the picture: their letters are made of the small words themselves,
       // set finer and closer inside each letter and a step brighter, with the words just round the letters dimmed a little,
       // so a word appears out of the texture from a distance and is all small words close up. One main word per picture,
@@ -247,7 +247,7 @@
         for (let y = q.cy - q.hh + fsI * CAP; y < q.cy + q.hh + stepI; y += stepI) line(fsI, y, q.cx - q.hw, q.cx + q.hw, false, false, 'i');
       });
       // the faces: their own finer rows, only where a face is
-      const fsF = body * 0.8, stepF = fsF * CAP + fsF * 0.14;
+      const fsF = body * 0.8, stepF = fsF * CAP + fsF * 0.1;
       for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
         const yc = y - fsF * CAP / 2, spans = [];
         faces.forEach(([a, b, rx, ry]) => { const e = (yc - b) / (ry * 1.15); if (Math.abs(e) < 1) { const hw = rx * 1.15 * Math.sqrt(1 - e * e); spans.push([a - hw - fsF * 2, a + hw + fsF * 2]); } });
@@ -258,7 +258,7 @@
       // keep only words that show: on the figure, on the right side of the soft line between face and body, and (for the
       // letter rows) touching a letter, (for the body rows) not wholly inside one
       words = words.filter(w => {
-        const my = w.y - w.fs * CAP / 2, on = onFamily(w.x + w.w / 2, my) || onFamily(w.x + 2, my) || onFamily(w.x + w.w - 2, my);
+        const my = w.y - w.fs * CAP / 2, on = [0.02, 0.25, 0.5, 0.75, 0.98].some(k => onFamily(w.x + w.w * k, my) || onFamily(w.x + w.w * k, my - w.fs * CAP * 0.4));
         if (!on) return false;
         if (w.tag === 'i') { for (let i = 0; i <= 6; i++) if (inLetter(w.x + w.w * i / 6, my)) return true; return false; }
         if (w.tag === 'f') return inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12);
@@ -282,6 +282,11 @@
       const [ifc, ifg] = mk(); ifg.drawImage(ic, 0, 0);
       ig.globalCompositeOperation = 'destination-in'; ig.drawImage(lc, 0, 0);
       for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      // a floor under the words' colour: words on dark clothes stay legible against the dark ground instead of vanishing
+      for (const [c0, g] of [[bc, bg], [fc, fg]]) {
+        const [flc, flg] = mk(); flg.fillStyle = 'rgb(108, 103, 100)'; flg.fillRect(0, 0, cw, ch); flg.globalCompositeOperation = 'destination-in'; flg.drawImage(c0, 0, 0);
+        g.globalCompositeOperation = 'lighten'; g.drawImage(flc, 0, 0);
+      }
       for (const g of [ig, ifg]) {   // the letter rows a clear step brighter, in the painting's colour softened so no dark stroke breaks a letter
         g.globalCompositeOperation = 'source-in'; g.filter = `blur(${Math.round(body * 0.6)}px) brightness(1.58) saturate(1.12)`; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none';
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.14; g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch); g.globalAlpha = 1;
@@ -316,27 +321,7 @@
       x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
       if (q <= 0) {
         x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.i, 0, 0);
-        if (hl) {
-          // the word you are pointing at, gently: the words round it settle back, a soft warm highlight, and the word
-          // itself a little larger and brighter in place, so it can be read without anything covering its neighbours
-          const S = Math.max(1.6, 15 * D / hl.h), cx = hl.x + hl.w / 2, cy = hl.top + hl.h / 2, r = hl.w * S * 0.7 + hl.h * S;   // large enough to read at a glance
-          const rg = x.createRadialGradient(cx, cy, 0, cx, cy, r); rg.addColorStop(0, 'rgba(16,13,12,0.5)'); rg.addColorStop(0.6, 'rgba(16,13,12,0.22)'); rg.addColorStop(1, 'rgba(16,13,12,0)');
-          x.fillStyle = rg; x.fillRect(cx - r, cy - r, r * 2, r * 2);
-          const bw = hl.w * S + hl.h * 0.9, bh = hl.h * S * 0.92;
-          x.fillStyle = 'rgba(255, 228, 170, 0.16)'; x.beginPath(); x.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, bh * 0.3); x.fill();
-          // set afresh at the larger size (crisp, not an enlarged copy), in the painting's colour there, lifted towards the light
-          if (!hl.spr) {
-            const fsz = hl.fs * S, t = document.createElement('canvas'), g = t.getContext('2d'); g.font = `700 ${fsz}px ${window.WP_FONT}`;
-            const tw = Math.ceil(g.measureText(hl.t).width + fsz * 0.4), th = Math.ceil(fsz * 1.2); t.width = tw; t.height = th;
-            g.font = `700 ${fsz}px ${window.WP_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(hl.t, tw / 2, th / 2);
-            // coloured by the painting under the word, softened and lifted towards the light
-            g.globalCompositeOperation = 'source-in'; g.filter = `blur(${Math.round(fsz * 0.15)}px) brightness(1.9) saturate(1.1)`;
-            const kx = img.naturalWidth / el.width, ky = img.naturalHeight / el.height;
-            g.drawImage(img, (cx - tw / 2) * kx, (cy - th / 2) * ky, tw * kx, th * ky, 0, 0, tw, th); g.filter = 'none';
-            hl.spr = t;
-          }
-          x.shadowColor = 'rgba(10,8,8,0.75)'; x.shadowBlur = 6 * D; x.drawImage(hl.spr, cx - hl.spr.width / 2, cy - hl.spr.height / 2); x.shadowBlur = 0;
-        }
+        if (hl) { x.fillStyle = '#f2ece2'; x.globalAlpha = 0.95; x.fillRect(hl.x, hl.y + hl.fs * 0.12, hl.w, Math.max(1.5 * D, hl.fs * 0.08)); x.globalAlpha = 1; }   // the word you are pointing at
         return;
       }
       for (const w of words) {
@@ -389,7 +374,7 @@
     // ---- reading its words: hover shows the word, a click or tap opens the message behind it ----
     function hit(cx, cy, pad) {
       const r = el.getBoundingClientRect(); if (!r.width) return null;
-      const px = (cx - r.left) * el.width / r.width, py = (cy - r.top) * el.height / r.height, pd = pad * D;
+      const px = (cx - r.left) * el.width / r.width, py = (cy - r.top) * el.height / r.height, pd = pad * D * 1.5;
       let best = null;
       for (const w of words) if (px >= w.x - pd && px <= w.x + w.w + pd && py >= w.top - pd && py <= w.top + w.h + pd) { if (!best || w.tag !== 'b') best = w; }   // a face or letter word wins over the row beneath it
       return best;
@@ -400,12 +385,13 @@
       if (e.pointerType !== 'mouse') return;
       const w = hit(e.clientX, e.clientY, 1);
       el.style.cursor = w ? 'pointer' : 'default';
+      if (w) showLoupe(w.t, rectOf(w), false); else hideLoupe();
       highlight(w || (picked && picked.art === api ? picked.w : null));
     });
-    el.addEventListener('pointerleave', () => { loupe.classList.remove('on'); highlight(picked && picked.art === api ? picked.w : null); });
+    el.addEventListener('pointerleave', () => { hideLoupe(); highlight(picked && picked.art === api ? picked.w : null); });
     el.addEventListener('click', e => {
       const w = hit(e.clientX, e.clientY, e.pointerType === 'mouse' ? 1 : 6);
-      if (w) { picked = { state, w, art: api }; highlight(w); loupe.classList.remove('on'); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
+      if (w) { picked = { state, w, art: api }; highlight(w); hideLoupe(); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
     });
     // where a visitor's word lands in the painting: one of its small body words, near the middle, chosen by the word's id
     function spot(id) {
@@ -687,6 +673,17 @@
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); sizeTravel(); travelPairs.clear(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
+  // The word under the pointer, in a label just above it (below it near the top of the screen), never cut off at the edges.
+  $('.stage').appendChild(loupe);
+  function showLoupe(text, r, mine) {
+    loupe.textContent = text; loupe.classList.toggle('mine', !!mine);
+    const st = $('.stage').getBoundingClientRect(), lw = loupe.offsetWidth, lh = loupe.offsetHeight, hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
+    const cx = Math.min(innerWidth - 10 - lw / 2, Math.max(10 + lw / 2, r.left + r.width / 2));
+    const above = r.top - lh - 8 >= hdr + 6, y = above ? r.top - 8 : r.top + r.height + 8;
+    loupe.style.transform = `translate(${(cx - lw / 2 - st.left).toFixed(1)}px, ${(above ? y - lh - st.top : y - st.top).toFixed(1)}px)`;
+    loupe.classList.add('on');
+  }
+  const hideLoupe = () => loupe.classList.remove('on');
   const local = e => { if (isArt(view.state)) return [-1e6, -1e6]; const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
   function wordAt(x, y, pad) {
     const s = view.state; if (isArt(s)) return null;   // a painting's words are read from its own canvas
@@ -703,11 +700,9 @@
     hover = w ? { state: view.state, w } : null;
     cv.style.cursor = w ? 'pointer' : 'default';
     if (w) {
-      loupe.textContent = w.t; loupe.classList.toggle('mine', !!w.mine);
-      const L = layoutFor(view.state);
-      loupe.style.transform = `translate(${L.ox + w.x + w.w / 2}px, ${L.oy + w.y - 8}px)`;
-      loupe.classList.add('on');
-    } else loupe.classList.remove('on');
+      const L = layoutFor(view.state), r = cv.getBoundingClientRect(), k = r.width / W;
+      showLoupe(w.t, { left: r.left + (L.ox + w.x) * k, top: r.top + (L.oy + w.y) * k, width: w.w * k, height: w.h * k }, w.mine);
+    } else hideLoupe();
     kick();
   });
   cv.addEventListener('pointerleave', () => { hover = null; loupe.classList.remove('on'); kick(); });

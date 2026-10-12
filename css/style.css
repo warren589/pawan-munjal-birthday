@@ -81,12 +81,13 @@ body.on-splash .top, body.on-splash .note { pointer-events: none !important; }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
 body.ready .loading { opacity: 0; }
 .loupe {
-  position: absolute; left: 0; top: 0; pointer-events: none; padding: 5px 9px; border-radius: 4px; background: var(--ink); color: var(--paper);
-  font: 600 12px/1 var(--narrow); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
-  translate: -50% -100%; opacity: 0; transition: opacity .2s;
+  /* the word under the pointer: dark on light, 13px, well above 4.5:1 contrast on any part of the picture */
+  position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; padding: 6px 10px; border-radius: 4px; background: var(--ink); color: #1a1718;
+  font: 700 13px/1 var(--narrow); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  opacity: 0; transition: opacity .15s;
 }
 .loupe.on { opacity: 1; }
-.loupe.mine { background: var(--accent); }
+.loupe.mine { background: var(--accent); color: #1a1718; }
 
 .flow { position: relative; z-index: 2; margin-top: -100vh; margin-top: -100svh; pointer-events: none; }
 .sec { min-height: 125vh; display: flex; align-items: center; padding: 0 0 0 62vw; }
