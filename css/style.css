@@ -295,10 +295,19 @@ textarea.err { border-color: var(--accent); }
   /* once the words lift off, the sheet slides away so they can be seen landing */
   .composer.emptied { transform: translateY(105%); transition: transform .8s var(--ease) .15s, opacity .8s; }
   .composer .x { right: 6px; top: 6px; }
-  .panel h2 { font-size: 24px; margin-bottom: 12px; }
-  textarea, .msgpreview { min-height: 110px; font-size: 17px; }
+  /* the whole sheet fits on the first screen: compact heading, a shorter box, name and connection side by side */
+  .composer { padding-top: 18px; }
+  .composer .eyebrow { margin-bottom: 8px; }
+  .panel h2 { font-size: 22px; margin-bottom: 10px; }
+  textarea, .msgpreview { min-height: 92px; max-height: 26svh; font-size: 16px; padding: 12px 14px; }
+  .found { margin: 6px 0 10px; }
   .composer .fine { display: none; }
-  .two { grid-template-columns: 1fr; }
+  .two { grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  .two label span { font-size: 9.5px; }
+  .two input { font-size: 15px; padding: 6px 0; }
+  .panel__foot { gap: 16px; }
+  /* once the words lift off, the sheet slips away a little sooner and softer */
+  .composer.emptied { transition: transform .9s cubic-bezier(.4, 0, .2, 1) .05s, opacity .9s; }
   .sheet__panel { padding: 24px 20px calc(30px + env(safe-area-inset-bottom)); }
   .letter p { font-size: 19px; }
 }

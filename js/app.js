@@ -147,7 +147,7 @@
       const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
       let w, h, left, top;
-      if (MOBILE.matches) { h = H; w = h * ar; if (w > vw * 1.8) { w = vw * 1.8; h = w / ar; } left = Math.max(0, (vw - w) / 2); top = hdr + 2 + (H - h); }   // a wide group: at most a little wider than the screen, standing where the portraits stand
+      if (MOBILE.matches) { h = H; w = h * ar; if (w > vw - 8) { w = vw - 8; h = w / ar; } left = (vw - w) / 2; top = hdr + 2 + (H - h); }   // never wider than the screen: it stays still   // a wide group: at most a little wider than the screen, standing where the portraits stand
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
         const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
@@ -956,9 +956,9 @@
       // each word lifts out of the text, then travels along its own hairline arc into the portrait: the arcs bow the
       // same way and leave one after another, so the words read as one deliberate sweep rather than a scatter
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'flight'); document.body.appendChild(svg);
-      const n = entries.length, stagger = Math.min(240, 1600 / Math.max(1, n));
-      const LIFT = REDUCED.matches ? 0 : 420, TRAVEL = REDUCED.matches ? 300 : 1500;
-      const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const mobFly = MOBILE.matches, n = entries.length, stagger = mobFly ? Math.min(150, 1000 / Math.max(1, n)) : Math.min(240, 1600 / Math.max(1, n));
+      const LIFT = REDUCED.matches ? 0 : mobFly ? 240 : 420, TRAVEL = REDUCED.matches ? 300 : mobFly ? 1250 : 1500;
+      const ease = mobFly ? t => -(Math.cos(Math.PI * t) - 1) / 2 : t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // phones: a gentler curve, no snap at either end
       const flights = entries.map((v, i) => {
         const srcEl = preview.querySelector(`mark[data-w="${v.t}"]`) || preview;
         const sr = srcEl.getBoundingClientRect(), cs = getComputedStyle(srcEl), fs0 = parseFloat(cs.fontSize);
@@ -1007,13 +1007,13 @@
           }
           const r = Math.min(1, (t - LIFT) / TRAVEL), m = ease(r), d = m * f.total, [x, y] = f.byLen(d);
           const sc1 = 1.06 + (f.s1 - 1.06) * m, swap = Math.min(1, Math.max(0, (m - 0.4) / 0.3));
-          f.fl.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%) scale(${sc1})`;
+          f.fl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%,-50%) scale(${sc1.toFixed(3)})`;
           f.fl.firstChild.style.opacity = 1 - swap; f.fl.lastChild.style.opacity = swap;
           if (!f.inHere) f.fl.style.opacity = 1 - Math.max(0, (m - 0.7) / 0.3);
           // a short tail of the hairline trails the word, then lets go of it
           const tail = f.total * 0.22, a0 = Math.max(0, d - tail);
           f.path.style.strokeDasharray = `0 ${a0} ${d - a0} ${f.total * 2}`;
-          f.path.style.opacity = 0.38 * Math.min(1, r * 6) * (1 - Math.max(0, (r - 0.7) / 0.3));   // a faint thread, not a stroke
+          f.path.style.opacity = (mobFly ? 0.2 : 0.38) * Math.min(1, r * 6) * (1 - Math.max(0, (r - 0.7) / 0.3));   // a faint thread, not a stroke
           if (r >= 1) {
             f.done = true; f.path.remove();
             const v = f.v; v.landed = true; if (f.inHere) v.arrived[s] = performance.now();
@@ -1133,7 +1133,7 @@
       sec.classList.toggle('direct', mob);
       gTop = mob ? hdr + 20 + head.offsetHeight + 34 : hdr + 56;   // phones: the title, then the board
       const colX = Array.from({ length: cols }, (_, k) => side + k * (cw + gap)), colH = colX.map(() => 0);
-      const rates = [-0.05, 0.04, -0.03, 0.05];
+      const rates = [0, 0, 0, 0];   // once settled the letters move exactly with the page: no drift, nothing loose
       // a year heading opens each group, across the whole width; the group's letters then fill the columns below it
       heads.forEach(h => { h.el.style.width = (vw - side * 2) + 'px'; });
       const HEAD = mob ? 74 : 104;
@@ -1214,7 +1214,9 @@
       });
       // the year navigation rides on the heading row: level with the first heading, then held under the page header
       if (heads.length) {
-        const top = Math.max(hdr + 6, gTop + heads[0].y - after) + (1 - ha) * 20, on = ha > 0.05 && r.top < vh * 0.5 && r.bottom > vh * 0.35;   // only while the board is on screen
+        // the first heading's place on screen (before the stage is pinned it still rides up with the page)
+        const firstY = Math.max(0, r.top) + gTop + heads[0].y - after;
+        const top = Math.max(hdr + 6, firstY) + (1 - ha) * 20, on = ha > 0.05 && firstY < vh * 0.85 && r.bottom > vh * 0.35;   // only once its heading is in view
         let cur = 0; heads.forEach((h, i) => { if (gTop + h.y - after <= hdr + 60) cur = i; });
         yearNav.style.transform = `translateY(${top.toFixed(1)}px)`; yearNav.style.right = side + 'px';
         yearNav.style.opacity = on ? ha : 0; yearNav.classList.toggle('on', on && ha > 0.6);
