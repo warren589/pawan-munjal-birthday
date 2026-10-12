@@ -151,7 +151,7 @@
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
         const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
-        w = Math.min(zr - zl, (vh - hdr - 60) * ar); h = w / ar;
+        w = Math.min(zr - zl, (vh - hdr - 60) * (f.artScale || 1) * ar); h = w / ar;   // artScale: a figure standing smaller in its scene
         left = zl + (zr - zl - w) / 2; top = Math.max(hdr + 12, vh / 2 - h * 0.44);
       }
       box = { w: Math.round(w), h: Math.round(h), top, left };
@@ -162,7 +162,7 @@
         // the scene's place, cut to the screen (on a phone only top and bottom: it pans sideways with the painting)
         const a = f.artScene, mob = MOBILE.matches, l0 = left + a.x * box.w, r0 = left + (a.x + a.w) * box.w;
         const l = mob ? Math.max(l0, left - vw * 0.5) : Math.max(0, l0), t = Math.max(mob ? hdr : 0, top + a.y * box.h);
-        const r = mob ? Math.min(r0, left + box.w + vw * 0.5) : Math.min(vw, r0), b = Math.min(vh, top + (a.y + a.h) * box.h);
+        const r = mob ? Math.min(r0, left + box.w + vw * 0.5) : Math.min(vw * (state === 'hero' || state === 'final' ? 0.56 : 0.61), r0), b = Math.min(vh, top + (a.y + a.h) * box.h);   // desktop: ends well short of the text
         sbox = { left: l, top: t, w: Math.max(1, Math.round(r - l)), h: Math.max(1, Math.round(b - t)) };
         Object.assign(scn.style, { left: l + 'px', top: t + 'px', width: sbox.w + 'px', height: sbox.h + 'px', display: sceneOn ? '' : 'none' });
       }
@@ -203,11 +203,21 @@
       const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * D;
       // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
       // oval: [how much larger, how far out it stays solid] — larger and flatter reads less as a spotlight
-      const [grow, solidTo] = f.artScene.oval || [1, 0.5];
-      const rx = Math.min((bw * 0.44 + bh * 0.4) * grow, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min((bh * 0.56 + bw * 0.12) * grow, Math.min(cy - iy, iy + ih - cy) * 1.08);
-      g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
-      const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(solidTo, solidTo > 0.5 ? '#000' : 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = rg; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.restore();
+      if (f.artScene.natural) {
+        // natural: the painting simply softens away on every side over a wide margin, the corners a little more, with no
+        // centre to it, the way a painted scene fades into a dark wall
+        const L = Math.max(ix, 0), Rr = Math.min(ix + iw, W2), T = Math.max(iy, 0), fw = (Rr - L) * 0.24, fh = (oy + bh - T) * 0.26;
+        edge(L, 0, L + fw, 0); edge(Rr, 0, Rr - (Rr - L) * 0.4, 0); edge(0, T, 0, T + fh);   // the side towards the text fades out furthest
+        const mx = (L + Rr) / 2, my = (T + oy + bh) / 2, rr = Math.hypot(Rr - L, oy + bh - T) * 0.62;
+        const cg = g.createRadialGradient(mx, my, 0, mx, my, rr); cg.addColorStop(0, '#000'); cg.addColorStop(0.72, '#000'); cg.addColorStop(1, 'rgba(0,0,0,0.25)');
+        g.fillStyle = cg; g.fillRect(0, 0, W2, H2);
+      } else {
+        const [grow, solidTo] = f.artScene.oval || [1, 0.5];
+        const rx = Math.min((bw * 0.44 + bh * 0.4) * grow, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min((bh * 0.56 + bw * 0.12) * grow, Math.min(cy - iy, iy + ih - cy) * 1.08);
+        g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
+        const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(solidTo, solidTo > 0.5 ? '#000' : 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = rg; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.restore();
+      }
       const fy0 = oy + bh * (f.artFade || 0.86) - bh * 0.1, lg = g.createLinearGradient(0, fy0, 0, oy + bh); lg.addColorStop(0, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = lg; g.fillRect(0, 0, W2, H2);   // whole canvas: the gradient holds solid above the fade and clear below it
       g.globalCompositeOperation = 'source-over';
