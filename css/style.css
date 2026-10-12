@@ -1,11 +1,12 @@
 :root {
-  --paper: #f3eee6;
-  --paper-2: #ebe4d9;
-  --ink: #1d1a17;
-  --ink-soft: #5d5650;
-  --muted: #8a8279;
-  --line: rgba(29, 26, 23, .14);
-  --accent: #a8452c;
+  /* the whole site sits on the oil-painting texture: light type and light portraits on a dark, warm ground */
+  --paper: #1c1a1b;
+  --paper-2: #262325;
+  --ink: #f2ece2;
+  --ink-soft: #cfc6ba;
+  --muted: #a0968b;
+  --line: rgba(242, 236, 226, .18);
+  --accent: #f0643f;
   --serif: "Newsreader", Georgia, serif;
   --sans: "Archivo", system-ui, sans-serif;
   --narrow: "Archivo Narrow", "Arial Narrow", sans-serif;
@@ -14,8 +15,11 @@
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.55 var(--serif); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+body { margin: 0; background: #1c1a1b; color: var(--ink); font: 400 17px/1.55 var(--serif); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 body.locked { overflow: hidden; }
+/* the painting stays still behind everything, so the splash, the portraits and the messages share one ground */
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(rgba(16, 15, 16, var(--veil, .42)), rgba(16, 15, 16, var(--veil, .42))), url(../assets/splash/texture.jpg) center / cover; }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 em { font-style: italic; }
@@ -33,6 +37,9 @@ em { font-style: italic; }
 
 /* ---------- header + timeline ---------- */
 .top { position: fixed; inset: 0 0 auto 0; z-index: 30; height: var(--hdr); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
+/* over the messages, a soft shade behind the header keeps it readable as the letters pass under it */
+.top::before { content: ''; position: absolute; inset: 0 0 -24px; z-index: -1; background: linear-gradient(rgba(18, 17, 18, .9), rgba(18, 17, 18, 0)); opacity: 0; transition: opacity .4s; pointer-events: none; }
+body.on-board .top::before { opacity: 1; }
 .mark { font: 500 15px/1 var(--serif); color: var(--ink); text-decoration: none; }
 .mark span { font: 500 10px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-left: 12px; }
 
@@ -49,7 +56,7 @@ body[data-state="hero"] .rail, body:not([data-state]) .rail { pointer-events: no
 .rail button.on { color: var(--ink); }
 .rail button.on::after { background: var(--ink); border-color: var(--ink); box-shadow: 0 0 0 4px var(--paper), 0 0 0 5px var(--line); }
 .rail button:hover span { opacity: 1; transform: translate(0, -50%); }
-@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(168, 69, 44, .5); } 100% { box-shadow: 0 0 0 12px rgba(168, 69, 44, 0); } }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(240, 100, 63, .5); } 100% { box-shadow: 0 0 0 12px rgba(240, 100, 63, 0); } }
 .rail button.ping::after { background: var(--accent); border-color: var(--accent); animation: ping 1s var(--ease) 2; }
 
 /* ---------- stage: one sticky portrait, notes scroll past it ---------- */
@@ -58,6 +65,11 @@ main { position: relative; }
 /* portraits stand on the bottom edge of the screen */
 .frame { position: absolute; bottom: 0; left: 31%; transform: translateX(-50%); opacity: 0; transition: opacity 1.2s var(--ease); }
 body.ready .frame { opacity: 1; }
+/* while the splash is up, the page underneath waits unseen and fades in as the figure lifts away */
+.stage, .top { opacity: var(--reveal, 1); }
+.stage { translate: 0 var(--rise, 0px); }
+.hero .note { opacity: calc(var(--no, 0) * var(--reveal, 1)); }
+body.on-splash .top, body.on-splash .note { pointer-events: none !important; }
 .portrait { display: block; }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
 body.ready .loading { opacity: 0; }
@@ -93,15 +105,16 @@ body.ready .loading { opacity: 0; }
 body.finding .note.vis { opacity: calc(var(--no, 0) * .25) !important; }
 
 /* ---------- the messages: a wall of letters that settles into a grid ---------- */
-.wall { position: relative; z-index: 3; background: var(--paper); overflow-x: clip; overflow-anchor: none; }
+.wall { position: relative; z-index: 3; overflow-x: clip; overflow-anchor: none; }
 .wall__pin { position: relative; }
 .wall__stage { position: sticky; top: 0; height: 100vh; }
 .wall__cards { position: absolute; inset: 0; }
 .wcard { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; box-sizing: border-box; }
 /* the card's paper is its own layer, as tall as what is showing: a shortened letter in the scatter, the full one in the grid */
+.wcard { --ink: #1d1a17; --ink-soft: #5d5650; --muted: #8a8279; --line: rgba(29, 26, 23, .14); --accent: #a8452c; }
 .wcard__bg { position: absolute; left: 0; right: 0; top: 0; height: var(--vis, 100%); background: #faf7f1; border: 1px solid rgba(29, 26, 23, .07); border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(29, 26, 23, .06), 0 1px 3px rgba(29, 26, 23, .04); overflow: hidden; }
-.wcard__bg::after { content: ""; position: absolute; inset: 0; background: var(--paper); opacity: var(--wash, 0); }
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .28), 0 1px 3px rgba(0, 0, 0, .2); overflow: hidden; }
+.wcard__bg::after { content: ""; position: absolute; inset: 0; background: #2a2627; opacity: var(--wash, 0); }
 .wcard__full { position: relative; clip-path: inset(0 0 calc(100% - var(--vis, 100%)) 0); opacity: var(--open, 1); }
 .wcard__short { position: absolute; left: 0; right: 0; top: 0; opacity: var(--short, 0); pointer-events: none; }
 .wcard:not(.is-long) .wcard__short { visibility: hidden; }
@@ -145,7 +158,7 @@ body.finding .findpill { background: var(--accent); border-color: var(--accent);
 
 /* ---------- composer: docked beside the portrait, no overlay ---------- */
 .sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; }
-.scrim { position: absolute; inset: 0; background: rgba(243, 238, 230, .82); backdrop-filter: blur(6px); opacity: 0; transition: opacity .45s var(--ease); }
+.scrim { position: absolute; inset: 0; background: rgba(18, 17, 18, .78); backdrop-filter: blur(6px); opacity: 0; transition: opacity .45s var(--ease); }
 .sheet.open .scrim { opacity: 1; }
 .composer { position: fixed; left: 62vw; top: 50%; width: min(420px, 32vw); z-index: 40; transform: translateY(calc(-50% + 16px)); opacity: 0; pointer-events: none; transition: opacity .55s var(--ease), transform .55s var(--ease); }
 .composer.open { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
@@ -167,11 +180,11 @@ textarea:focus { border-color: var(--ink-soft); }
 textarea.err { border-color: var(--accent); }
 .msgwrap { background: var(--paper-2); border-radius: 8px; }
 .msgpreview { position: absolute; inset: 0; border: 1px solid transparent; color: var(--ink); pointer-events: none; overflow: hidden; scrollbar-width: none; transition: color .6s var(--ease); }
-.msgpreview mark { background: none; color: var(--accent); box-shadow: inset 0 -.38em rgba(168, 69, 44, .12); border-radius: 2px; transition: opacity .25s, color .4s; }
+.msgpreview mark { background: none; color: var(--accent); box-shadow: inset 0 -.38em rgba(240, 100, 63, .16); border-radius: 2px; transition: opacity .25s, color .4s; }
 .msgpreview mark.gone { opacity: 0; }
 .composer.sending textarea { border-color: transparent; }
 .composer.sending .msgwrap { background: transparent; transition: background .5s; }
-.composer.emptied .msgpreview { color: rgba(29, 26, 23, 0); transition: color 1s var(--ease); }
+.composer.emptied .msgpreview { color: rgba(242, 236, 226, 0); transition: color 1s var(--ease); }
 .found { min-height: 1.4em; margin: 10px 0 16px; font: 400 12px/1.4 var(--sans); color: var(--accent); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; align-items: end; }
 .two label span { display: block; white-space: nowrap; font: 500 10px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
@@ -220,7 +233,7 @@ textarea.err { border-color: var(--accent); }
   .note .btn { padding: 12px 22px; }
   .final .row { margin-bottom: 10px; }
   /* the header: frosted paper, so the portrait and text pass softly underneath */
-  .top { background: rgba(243, 238, 230, .72); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); border-bottom: 1px solid rgba(29, 26, 23, .06); }
+  .top { background: rgba(26, 24, 25, .62); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); border-bottom: 1px solid rgba(242, 236, 226, .07); }
   .rail { top: auto; bottom: 0; left: 0; right: 0; transform: none; flex-direction: row; justify-content: center; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--paper) 45%); }
   .rail::before, .rail::after { display: none; }
   .rail button { padding: 4px 6px 14px; text-align: center; }
@@ -294,16 +307,15 @@ main { margin-top: -100vh; margin-top: -100svh; }   /* the page starts underneat
 .splash {
   --fh: min(86svh, 64vw);                             /* the figure's height; everything is placed from it */
   --ly: calc(100svh - var(--fh) * .53);               /* the line the words and logos sit on: level with his neck */
-  position: relative; z-index: 40; height: 100vh; height: 100svh; overflow: hidden; color: #fff;
-  background: #1d1c1e url(../assets/splash/texture.jpg) center / cover; box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+  position: relative; z-index: 40; height: 100vh; height: 100svh; overflow-x: clip; color: #fff; pointer-events: none;
 }
-.splash::after { content: ''; position: absolute; inset: 0; background: #0d0c0d; opacity: var(--dim, 0); pointer-events: none; z-index: 3; }
-.splash__fig { position: absolute; left: 50%; bottom: 0; height: var(--fh); width: auto; max-width: none; translate: -50% var(--fy, 0px); z-index: 1; animation: splashRise 1.6s cubic-bezier(.2, .7, .2, 1) both; }
+.splash__fig { position: absolute; left: 50%; bottom: 0; scale: var(--fsc, 1); transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(to top, transparent, #000 var(--mk, 0%)); mask-image: linear-gradient(to top, transparent, #000 var(--mk, 0%));   /* as he rises, the cut-off at the bottom melts away */ height: var(--fh); width: auto; max-width: none; translate: -50% var(--fy, 0px); opacity: var(--fo, 1); z-index: 1; animation: splashRise 1.6s cubic-bezier(.2, .7, .2, 1) backwards; }
 .splash__w, .splash__logo { position: absolute; top: var(--ly); translate: 0 calc(-50% + var(--wy, 0px)); margin: 0; z-index: 2; }
-.splash__w { font: 300 clamp(40px, 4.6vw, 78px)/1.2 "Noto Sans Devanagari", var(--sans); white-space: nowrap; opacity: var(--wo, 1); animation: splashIn 1.2s cubic-bezier(.2, .7, .2, 1) .5s both; }
-.splash__w--l { right: calc(50% + var(--fh) * .27); color: #e0331f; }
-.splash__w--r { left: calc(50% + var(--fh) * .27); animation-delay: .7s; }
-.splash__logo { height: auto; opacity: var(--wo, 1); animation: splashIn 1.2s cubic-bezier(.2, .7, .2, 1) 1s both; }
+.splash__w { font: 300 clamp(40px, 4.6vw, 78px)/1.2 "Noto Sans Devanagari", var(--sans); white-space: nowrap; opacity: var(--wo, 1); animation: splashIn 1.2s cubic-bezier(.2, .7, .2, 1) .5s backwards; }
+.splash__w--l { right: calc(50% + var(--fh) * .315); color: #e0331f; }
+.splash__w--r { left: calc(50% + var(--fh) * .25); animation-delay: .7s; }
+.splash__logo { height: auto; opacity: var(--wo, 1); animation: splashIn 1.2s cubic-bezier(.2, .7, .2, 1) 1s backwards; }
 .splash__logo--hero { left: 7vw; width: clamp(92px, 8.4vw, 150px); }
 .splash__logo--vida { right: 7vw; width: clamp(100px, 9.2vw, 164px); }
 @keyframes splashRise { from { opacity: 0; transform: translateY(5%); } to { opacity: 1; transform: none; } }
@@ -324,8 +336,8 @@ body.ready .splash__scroll { opacity: 1; }
   .splash__logo--hero { left: 20px; width: 92px; }
   .splash__logo--vida { right: 20px; width: 100px; }
   .splash__w { top: calc((100svh - var(--fh)) * .72); font-size: clamp(40px, 11.5vw, 58px); }
-  .splash__w--l { right: calc(50% + 7px); }
-  .splash__w--r { left: calc(50% + 7px); }
+  .splash__w--l { right: calc(50% + 8px + var(--fh) * .035); }   /* centred over his head, not the image */
+  .splash__w--r { left: calc(50% + 8px - var(--fh) * .035); }
   .splash__cue { bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); }
 }
 

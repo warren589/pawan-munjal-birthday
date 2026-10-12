@@ -4,7 +4,7 @@
 // each pixel inside the letters takes its colour from the tone-mapped photo — so no word is
 // emphasised over another.
 (function () {
-  const PAPER = '#f3eee6';
+  const PAPER = '#1c1a1b';
   const FONT = '"Archivo Narrow", "Arial Narrow", sans-serif';
 
   function rng(seed) { let a = seed >>> 0; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; }
@@ -16,10 +16,12 @@
   // the floor keeps every part of the silhouette made of (light) words.
   const toneOf = l => { const k = Math.min(1, Math.max(0, (0.88 - l) / 0.72)); return 0.07 + 0.93 * k * k * (3 - 2 * k); };
 
-  function ramp(mid, dark) {
-    const m = hex(mid), d = hex(dark), floor = mix(hex('#d6cbbd'), m, 0.22);   // the lightest words keep a hint of their facet's colour
-    const deep = mix(d, [12, 10, 9], 0.45);
-    const stops = [[0, floor], [0.1, mix(floor, m, 0.5)], [0.28, m], [0.5, mix(m, d, 0.65)], [0.74, d], [1, deep]];
+  // On the dark painting the portrait is set in light words: highlights in a warm cream with a hint of the facet's
+  // colour, deepening through the facet's colour towards the shadows, which stay light enough to read on the ground.
+  function ramp(mid) {
+    const m = hex(mid), cream = [248, 243, 234], top = mix(cream, m, 0.1), lit = mix(m, [255, 255, 255], 0.55), mm = mix(m, [255, 255, 255], 0.2);
+    const deep = mix(m, [150, 140, 130], 0.15);
+    const stops = [[0, top], [0.12, mix(top, lit, 0.5)], [0.32, lit], [0.55, mix(lit, mm, 0.6)], [0.78, mm], [1, deep]];
     return t => {
       let k = 0; while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
       const [t0, c0] = stops[k], [t1, c1] = stops[k + 1];
@@ -176,7 +178,7 @@
         const x0 = u0 * W, y0 = v0 * H, x1 = u1 * W, y1 = v1 * H, len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
         const fs = H / 165, col = hex(spec.ink[1]);
         tx.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang), dpr * x0, dpr * y0);
-        tx.font = `700 ${fs}px ${FONT}`; tx.fillStyle = toHex(mix(col, [10, 10, 10], 0.3)); tx.textBaseline = 'middle';
+        tx.font = `700 ${fs}px ${FONT}`; tx.fillStyle = toHex(mix(hex(spec.ink[0]), [255, 255, 255], 0.35)); tx.textBaseline = 'middle';
         let p = 0, k = si;
         while (p < len) { const t = spec.words[(k++ * 7) % spec.words.length].t.toUpperCase(); tx.fillText(t, p, 0); p += tx.measureText(t).width + fs * 0.3; }
         tx.setTransform(1, 0, 0, 1, 0, 0);

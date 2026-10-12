@@ -41,7 +41,7 @@ window.FACETS = [
 ];
 
 // The opening and closing portrait: the studio photograph, warm grey ink
-window.STUDIO = { img: 'studio', heads: [[0.46, 0.22, 0.27, 0.23]], ink: ['#8d8174', '#161311'] };
+window.STUDIO = { img: 'studio', heads: [[0.46, 0.22, 0.27, 0.23]], ink: ['#C48A5C', '#3a2618'] };   // the warm copper of the lettering on his jacket
 
 // Curated vocabulary: "word[,alias…]|FACETS"
 window.VOCAB_RAW = [

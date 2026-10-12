@@ -3,8 +3,10 @@
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
   const body = document.body;
   const FACETS = window.FACETS, CODES = FACETS.map(f => f.code);
-  const ACCENT = '#a8452c';            // visitor words: one muted vermilion, the only colour that isn't ink
+  const ACCENT = '#f0643f';            // visitor words: one vermilion, the only colour that isn't the portrait's own
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // a facet's colour lifted towards the light type, for headings and labels on the painting
+  const tint = h => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * 0.38 + [242, 236, 226][(i - 1) / 2] * 0.62).toString(16).padStart(2, '0')).join('');
   const smooth = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 
   // ---------------- vocabulary + word extraction (deterministic, no AI) ----------------
@@ -78,7 +80,7 @@
     if (qi < 0) qi = messages.findIndex((m, k) => !quoted.has(k) && m.facets.has(f.code));
     if (qi < 0) qi = 0; quoted.add(qi); const q = messages[qi];
     chapters.insertAdjacentHTML('beforeend', `
-      <section class="sec" data-state="${i}" id="facet-${i}" style="--ink:${f.ink[1]};--ink2:${f.ink[0]}">
+      <section class="sec" data-state="${i}" id="facet-${i}" style="--ink:${tint(f.ink[0])};--ink2:${f.ink[0]}">
         <div class="note fnote">
           <p class="eyebrow"><b>${String(i + 1).padStart(2, '0')}</b> / 07 <span>${f.name}</span></p>
           <h2 class="fline">${f.line}</h2>
@@ -87,9 +89,9 @@
           ${f.img ? '' : '<p class="pending-photo">Placeholder silhouette · photograph to come</p>'}
         </div>
       </section>`);
-    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${f.ink[1]}"><span>${f.name}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
+    rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" style="--ink:${tint(f.ink[0])}"><span>${f.name}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
   });
-  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#161311"><span>The whole person</span><b>∗</b></button>`);
+  rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" style="--ink:#f2ece2"><span>The whole person</span><b>∗</b></button>`);
   chapters.addEventListener('click', e => {
     const b = e.target.closest('.js-story'); if (!b) return;
     const st = b.nextElementSibling, open = st.hidden;
@@ -159,7 +161,7 @@
       const x = slot.x + slot.w / 2, y = slot.y + slot.fs * 0.74;
       if (find > 0.01 || glow > 0) {
         ctx.globalAlpha = alpha * Math.max(find * 0.9, glow * 0.85);
-        ctx.fillStyle = 'rgba(168,69,44,0.16)';
+        ctx.fillStyle = 'rgba(240,100,63,0.22)';
         const pw = tw * sx + 8;
         ctx.fillRect(x - pw / 2, y - slot.fs * 0.86, pw, slot.fs * 1.15);
       }
@@ -167,7 +169,7 @@
       ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1); ctx.textAlign = 'center'; ctx.fillText(slot.text, 0, 0); ctx.restore();
     }
     for (const hv of [hover, picked]) if (hv && hv.state === s && hv.w) {
-      const w = hv.w; ctx.globalAlpha = alpha; ctx.fillStyle = w.mine ? ACCENT : '#2a2622';
+      const w = hv.w; ctx.globalAlpha = alpha; ctx.fillStyle = w.mine ? ACCENT : '#f2ece2';
       ctx.fillRect(w.x - 1, w.y + w.h + 1, w.w + 2, hv === picked ? 1.5 : 1);
     }
     ctx.restore();
@@ -674,21 +676,28 @@
     return { added };
   })();
 
-  // ---------------- splash: lifts away like a curtain over the opening portrait ----------------
-  // It scrolls up with the page; inside it the figure trails behind and the words and logos drift and fade, so it
-  // reads as a layer being lifted rather than a block sliding off. The opening portrait waits underneath.
+  // ---------------- splash: the figure lifts away and the portrait comes up out of the same painting ----------------
+  // The splash has no ground of its own: the painting behind it is the page's, and stays still. Scrolling, the figure
+  // rises a little slower than the page and fades, the words and logos go first, and the opening portrait and its
+  // text fade up underneath, so one picture gives way to the other without an edge passing over the screen.
   (() => {
-    const sp = $('.splash'); if (!sp) return;
+    const sp = $('.splash'), root = document.documentElement; if (!sp) return;
     let raf = 0, last = -1;
     const draw = () => {
       raf = 0;
       const vh = sp.offsetHeight, s = Math.min(scrollY, vh);
       if (s === last) return; last = s;
       const p = s / vh, still = REDUCED.matches;
-      sp.style.setProperty('--fy', (still ? 0 : s * 0.42).toFixed(1) + 'px');
-      sp.style.setProperty('--wy', (still ? 0 : s * 0.18).toFixed(1) + 'px');
-      sp.style.setProperty('--wo', Math.max(0, 1 - p * 1.8).toFixed(3));
-      sp.style.setProperty('--dim', (p * 0.55).toFixed(3));
+      sp.style.setProperty('--fy', (still ? 0 : s * 0.38).toFixed(1) + 'px');
+      sp.style.setProperty('--fsc', (still ? 1 : 1 + p * 0.06).toFixed(4));
+      sp.style.setProperty('--fo', (1 - smooth(0.08, 0.55, p)).toFixed(3));
+      sp.style.setProperty('--wy', (still ? 0 : s * 0.12).toFixed(1) + 'px');
+      sp.style.setProperty('--wo', (1 - smooth(0, 0.3, p)).toFixed(3));
+      sp.style.setProperty('--mk', (smooth(0, 0.25, p) * 45).toFixed(1) + '%');
+      const rv = smooth(0.3, 0.85, p);
+      root.style.setProperty('--reveal', rv.toFixed(3));
+      root.style.setProperty('--rise', (still ? 0 : (1 - rv) * 36).toFixed(1) + 'px');
+      body.classList.toggle('on-splash', p < 0.6);
       sp.style.visibility = s >= vh ? 'hidden' : '';
     };
     addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(draw); }, { passive: true });
