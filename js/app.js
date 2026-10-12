@@ -184,7 +184,7 @@
       g.clearRect(0, 0, W2, H2);
       if (f.artScene.paint) {
         // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
-        g.globalAlpha = 0.84 * (f.artScene.dim || 1); g.filter = `brightness(${0.88 * (f.artScene.dim ? 0.82 : 1)}) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+        g.globalAlpha = Math.min(1, 0.84 * (f.artScene.dim || 1) * (f.artScene.bright || 1)); g.filter = `brightness(${0.88 * (f.artScene.dim ? 0.82 : 1) * (f.artScene.bright || 1)}) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
       } else {
         g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
         g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
@@ -286,7 +286,7 @@
       // the row grid: every line the same height
       // every word one size (faces a little finer, so they stay recognisable), set large enough to read
       // every portrait's words are one size on screen, whatever the painting's size (faces finer), so they read as one design
-      const wordPx = mob ? 5.2 : Math.min(9.6, Math.max(7.4, innerHeight * 0.0098)), body = wordPx * D, step = body * CAP + body * 0.1, y0 = body * CAP;
+      const wordPx = mob ? 5.8 : Math.min(10.8, Math.max(8.3, innerHeight * 0.011)), body = wordPx * D, step = body * CAP + body * 0.1, y0 = body * CAP;
       // The larger words (desktop) are not laid over the picture: their letters are made of the small words themselves,
       // set finer and closer inside each letter and a step brighter, with the words just round the letters dimmed a little,
       // so a word appears out of the texture from a distance and is all small words close up. One main word per picture,
