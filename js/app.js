@@ -188,13 +188,14 @@
       g.globalCompositeOperation = 'destination-in';
       // the painting's own edges fade too, wherever they fall inside the view
       const edge = (x0, y0, x1, y1) => { const lg2 = g.createLinearGradient(x0, y0, x1, y1); lg2.addColorStop(0, 'rgba(0,0,0,0)'); lg2.addColorStop(1, '#000'); g.fillStyle = lg2; g.fillRect(0, 0, W2, H2); };
-      const ex = iw * 0.1, ey = ih * 0.1;
+      const ex = iw * 0.14, ey = ih * 0.14;
       if (ix > -ex) edge(ix, 0, ix + ex, 0);
       if (ix + iw < W2 + ex) edge(ix + iw, 0, ix + iw - ex, 0);
       if (iy > -ey) edge(0, iy, 0, iy + ey);
       // and the oval stays clear of the screen's edge
       const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = (box.left + box.w / 2) * D;
-      const rx = Math.min(bw * 0.44 + bh * 0.4, sxl * 0.98), ry = bh * 0.56 + bw * 0.12;
+      // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
+      const rx = Math.min(bw * 0.44 + bh * 0.4, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min(bh * 0.56 + bw * 0.12, Math.min(cy - iy, iy + ih - cy) * 1.08);
       g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
       const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(0.5, 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = rg; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.restore();
@@ -314,6 +315,12 @@
         if (w.tag === 'f') return inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12);
         if (inLetter(w.x + 1, my) && inLetter(w.x + w.w / 2, my) && inLetter(w.x + w.w - 1, my)) return false;
         return !inFace(w.x + w.w / 2, my, 0.85);
+      });
+      const solid = (px, py) => md[(Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4] > 235;
+      words.forEach(w => {
+        if (w.tag !== 'b') return;
+        const top = w.y - w.fs * CAP, pad = w.fs * 0.5;
+        w.inside = [-pad, 0, 0.25, 0.5, 0.75, 1, 'e'].every(k => { const qx = k === 'e' ? w.x + w.w + pad : k === -pad ? w.x - pad : w.x + w.w * k; return [top - w.fs * 0.3, top + w.fs * CAP * 0.5, w.y + w.fs * 0.3].every(qy => solid(qx, qy) && !inFace(qx, qy, 1.2)); });
       });
       // draw the sets, each coloured by the cut-out painting, and blend body and faces along feathered ellipses
       const [bc, bg] = mk(), [fc, fg] = mk(), [ic, ig] = mk();
@@ -454,7 +461,8 @@
     function slot(v) {
       if (slots.has(v.id)) return slots.get(v.id);
       const n = v.t.length, used = [...slots.values()];
-      const cand = words.filter(w => w.tag === 'b' && Math.abs(w.t.length - n) <= 3 && w.y > el.height * 0.2 && w.y < el.height * 0.8 && w.x > el.width * 0.08 && w.x + w.w < el.width * 0.92);
+      let cand = words.filter(w => w.inside && Math.abs(w.t.length - n) <= 3 && w.y < el.height * (f.artFade || 0.86) * 0.92);   // wholly inside the figure, above its faded foot
+      if (!cand.length) cand = words.filter(w => w.inside);
       if (!cand.length) return null;
       let h = 0; for (const c of v.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
       let best = null, bd = -1;
@@ -469,16 +477,26 @@
     function spot(id) { const v = visitor.find(q => q.id === id); const sl = v && slot(v); return sl ? rectOf(sl) : null; }
     // the visitors' words, in the one accent colour; while finding, the painting dims and they are marked
     function paintMine(alpha) {
-      for (const v of mineHere()) {
+      const mine = mineHere(); if (!mine.length) return;
+      const t = document.createElement('canvas'); t.width = el.width; t.height = el.height; const g = t.getContext('2d');
+      const marks = [];
+      for (const v of mine) {
         const sl = slot(v); if (!sl) continue;
-        x.globalAlpha = alpha; x.font = `700 ${sl.fs}px ${window.WP_FONT}`;
-        const tw = x.measureText(sl.t).width, k = Math.min(1, sl.w / tw);
-        x.save(); x.globalCompositeOperation = 'destination-out'; x.fillRect(sl.x - 1, sl.top, sl.w + 2, sl.h); x.restore();   // the painted word makes way
-        const dw = tw * k, dx = sl.x + (sl.w - dw) / 2;
-        if (find > 0.01) { x.globalAlpha = alpha * find * 0.9; x.fillStyle = 'rgba(240,100,63,0.24)'; x.beginPath(); x.roundRect(dx - 4 * D, sl.top - 2 * D, dw + 8 * D, sl.h + 4 * D, 3 * D); x.fill(); }
-        x.globalAlpha = alpha; x.fillStyle = ACCENT; x.save(); x.translate(dx, sl.y); x.scale(k, 1); x.fillText(sl.t, 0, 0); x.restore();
+        g.font = `700 ${sl.fs}px ${window.WP_FONT}`;
+        const tw = g.measureText(sl.t).width, k = Math.min(1, sl.w / tw), dw = tw * k, dx = sl.x + (sl.w - dw) / 2;
+        // the painted word makes way; the brushwork under it stays
+        x.save(); x.globalCompositeOperation = 'destination-out'; x.fillRect(sl.x - 1, sl.top, sl.w + 2, sl.h); x.restore();
+        x.globalAlpha = 1 - 0.6 * find; x.drawImage(layers.under, sl.x - 1, sl.top, sl.w + 2, sl.h, sl.x - 1, sl.top, sl.w + 2, sl.h); x.globalAlpha = 1;
+        g.fillStyle = '#fff'; g.save(); g.translate(dx, sl.y); g.scale(k, 1); g.fillText(sl.t, 0, 0); g.restore();
+        marks.push([dx, sl.top, dw, sl.h]);
       }
-      x.globalAlpha = 1;
+      // in the painting's own colour, lifted towards a warm light: it reads as one of the portrait's words, a shade brighter
+      g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.25) saturate(0.9)'; g.drawImage(img, 0, 0, t.width, t.height); g.filter = 'none';
+      g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255, 214, 180, 0.3)'; g.fillRect(0, 0, t.width, t.height);
+      if (find > 0.01) { g.globalAlpha = find; g.fillStyle = ACCENT; g.fillRect(0, 0, t.width, t.height); g.globalAlpha = 1; }   // finding: the accent
+      g.globalCompositeOperation = 'destination-in'; g.drawImage(img, 0, 0, t.width, t.height);   // never past the outline
+      if (find > 0.01) { x.globalAlpha = alpha * find * 0.9; x.fillStyle = 'rgba(240,100,63,0.24)'; marks.forEach(([mx, my, mw, mh]) => { x.beginPath(); x.roundRect(mx - 4 * D, my - 2 * D, mw + 8 * D, mh + 4 * D, 3 * D); x.fill(); }); }
+      x.globalAlpha = alpha; x.drawImage(t, 0, 0); x.globalAlpha = 1;
     }
     const api = { state, el, loaded, spot, place, build: () => { build(); painted = -1; }, show, ground, travellers, rectOf, unpick: () => highlight(null) };
     return api;
