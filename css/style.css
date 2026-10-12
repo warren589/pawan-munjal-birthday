@@ -72,6 +72,7 @@ body.ready .frame { opacity: 1; }
 body.on-splash .top, body.on-splash .note { pointer-events: none !important; }
 .portrait { display: block; }
 .famart { position: absolute; left: 0; z-index: 2; pointer-events: none; opacity: 0; visibility: hidden; }
+.travel { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; }
 /* the family: the painting on the left, a little wider than the portraits; the text on the right in a bold condensed sans */
 /* painted facets */
 .sec.painted .note { left: 67vw; width: min(380px, 27vw); }

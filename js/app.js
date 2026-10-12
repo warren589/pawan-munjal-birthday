@@ -309,10 +309,28 @@
       if (REDUCED.matches) el.style.opacity = v;
       if (q !== painted) { painted = q; paint(q); } lastQ = q;
       el.style.pointerEvents = v > 0.9 ? 'auto' : 'none';   // its words can be read once it has gathered
-      if (mob && box.w > innerWidth) {
+      pan();
+    }
+    // on a phone a painting wider than the screen pans across as you scroll through its section
+    function pan() {
+      if (MOBILE.matches && box && box.w > innerWidth) {
         const r = $('#facet-' + fi).getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
         el.style.transform = `translateX(${(-(box.w - innerWidth) * p).toFixed(1)}px)`;
       } else el.style.transform = 'none';
+    }
+    // while its words are travelling to or from another facet: only the painting's faint ground, at presence p
+    function ground(p) {
+      if (!layers || !box) return;
+      el.style.opacity = 1; el.style.visibility = 'visible'; el.style.pointerEvents = 'none'; pan();
+      x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, el.width, el.height);
+      x.globalAlpha = 0.16 * p; x.drawImage(layers.scene, 0, 0);
+      x.globalAlpha = smooth(0.55, 1, p); x.drawImage(layers.under, 0, 0); x.globalAlpha = 1;   // the brushwork comes in only as the words settle
+      shown = -1; painted = -1;
+    }
+    // its words as travellers: each one's sprite (a piece of its layer) and its centre, in CSS pixels within the canvas
+    function travellers() {
+      if (!layers) return [];
+      return words.map(w => ({ c: layers[w.tag], sx: w.x, sy: w.top, sw: w.w, sh: w.h, w: w.w / D, h: w.h / D, ox: -w.w / D / 2, oy: -w.h / D / 2, cx: (w.x + w.w / 2) / D, cy: (w.top + w.h / 2) / D, fs: w.fs / D }));
     }
     // ---- reading its words: hover shows the word, a click or tap opens the message behind it ----
     function hit(cx, cy, pad) {
@@ -341,12 +359,66 @@
       const w = hit(e.clientX, e.clientY, e.pointerType === 'mouse' ? 1 : 6);
       if (w) { picked = { state, w, art: api }; highlight(w); loupe.classList.remove('on'); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
     });
-    const api = { state, loaded, place, build: () => { build(); painted = -1; }, show, rectOf, unpick: () => highlight(null) };
+    const api = { state, el, loaded, place, build: () => { build(); painted = -1; }, show, ground, travellers, rectOf, unpick: () => highlight(null) };
     return api;
   };
   const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(i); });
   const ART_LIST = Object.values(ARTS);
   const isArt = s => !!ARTS[s];
+
+  // ---------------- words travelling between any two facets ----------------
+  // Between two word portraits the shuffle runs inside the portrait's own frame (WordPortraits.drawShuffle). Where a
+  // painting is involved the two pictures sit in different places and sizes, so the words travel on a layer over the
+  // whole stage instead: every word of one facet is paired with a word of the next (top rows with top rows, loosely),
+  // flies to it along a slight arc and turns into it on the way. At either end the travellers sit exactly on their
+  // picture's own words, so the hand-over is invisible.
+  const travel = document.createElement('canvas'), tctx = travel.getContext('2d');
+  travel.className = 'travel'; travel.setAttribute('aria-hidden', 'true'); $('.stage').appendChild(travel);
+  let travelOn = false;
+  function sizeTravel() { travel.width = Math.round(innerWidth * dpr); travel.height = Math.round(innerHeight * dpr); travel.style.width = innerWidth + 'px'; travel.style.height = innerHeight + 'px'; }
+  function travellersOf(s) {
+    if (isArt(s)) return ARTS[s].travellers();
+    const L = layoutFor(s);
+    return L.glyphs.filter(g => g.sp).map(g => ({ c: g.sp.c, sx: g.sp.sx, sy: g.sp.sy, sw: g.sp.sw, sh: g.sp.sh, w: g.sp.w, h: g.sp.h, ox: g.sp.ox, oy: g.sp.oy, cx: L.ox + g.x + g.w / 2, cy: L.oy + g.y + g.h / 2, fs: g.fs }));
+  }
+  // where a facet's picture sits on the stage right now (paintings on a phone pan with the scroll)
+  function originOf(s) { const r = (isArt(s) ? ARTS[s].el : cv).getBoundingClientRect(), st = travel.getBoundingClientRect(); return [r.left - st.left, r.top - st.top]; }
+  const travelPairs = new Map();
+  function pairsFor(a, b) {
+    const key = `${a}>${b}|${innerWidth}x${innerHeight}|${W}x${H}`;
+    if (travelPairs.has(key)) return travelPairs.get(key);
+    const A = travellersOf(a), B = travellersOf(b); if (!A.length || !B.length) return null;
+    const [ax, ay] = originOf(a), [bx, by] = originOf(b), vh = innerHeight, R = seeded(A.length * 31 + B.length * 7);
+    // pair by height on the stage (with some noise), so most journeys are short and the picture re-forms top to bottom
+    const order = (T, ox, oy) => T.map(t => ({ t, k: oy + t.cy + R() * vh * 0.22 })).sort((p, q) => p.k - q.k).map(o => o.t);
+    const oa = order(A, ax, ay), ob = order(B, bx, by), n = Math.max(oa.length, ob.length), P = new Array(n);
+    let pa = -1, pb = -1;
+    for (let k = 0; k < n; k++) {
+      const ia = Math.floor(k * oa.length / n), ib = Math.floor(k * ob.length / n);
+      P[k] = { a: oa[ia], b: ob[ib], aMain: ia !== pa, bMain: ib !== pb, d: Math.min(1, Math.max(0, ((by + ob[ib].cy) / vh) * 0.55 + R() * 0.45)), arc: (R() - 0.5) * vh * 0.12 };
+      pa = ia; pb = ib;
+    }
+    travelPairs.set(key, P); if (travelPairs.size > 8) travelPairs.delete(travelPairs.keys().next().value);
+    return P;
+  }
+  function drawTravel(a, b, e, mul) {
+    const P = pairsFor(a, b); if (!P) return;
+    const [ax, ay] = originOf(a), [bx, by] = originOf(b), span = 0.55;
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0); tctx.clearRect(0, 0, innerWidth, innerHeight); travelOn = true;
+    const put = (t, cx, cy, al) => { tctx.globalAlpha = al * mul; tctx.drawImage(t.c, t.sx, t.sy, t.sw, t.sh, cx + t.ox, cy + t.oy, t.w, t.h); };
+    for (const p of P) {
+      let t = (e - p.d * (1 - span)) / span; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const m = t * t * (3 - 2 * t), bump = Math.sin(Math.PI * m);
+      const x0 = ax + p.a.cx, y0 = ay + p.a.cy, x1 = bx + p.b.cx, y1 = by + p.b.cy;
+      const cx = x0 + (x1 - x0) * m + bump * p.arc * 0.2, cy = y0 + (y1 - y0) * m + bump * p.arc * 0.6;
+      let q = (m - 0.3) / 0.4; q = q < 0 ? 0 : q > 1 ? 1 : q;   // which word it reads as, mid-flight
+      const fs = Math.min(p.a.fs, p.b.fs), small = fs >= 11 ? 0 : fs <= 6 ? 1 : (11 - fs) / 5, air = 1 - (0.12 + 0.3 * small) * bump;
+      if (p.aMain && q < 0.99) put(p.a, cx, cy, (1 - q) * air);
+      if (p.bMain && q > 0.01) put(p.b, cx, cy, q * air);
+    }
+    tctx.globalAlpha = 1;
+  }
+  function clearTravel() { if (!travelOn) return; tctx.setTransform(1, 0, 0, 1, 0, 0); tctx.clearRect(0, 0, travel.width, travel.height); travelOn = false; }
 
   // visitor words: { id, t, facets, m, arrived:{state:time}, landed }
   const visitor = [];
@@ -439,11 +511,23 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     let anim = find !== findTarget;
     if (isArt(b.a) || isArt(b.b)) {
-      // to and from a painting: a portrait fades as the painting gathers from its words, and back
-      const parts = b.a === b.b ? [[b.a, 1]] : [[b.a, 1 - b.e], [b.b, b.e]];
-      for (const [st, p] of parts) {
-        if (isArt(st)) ARTS[st].show(smooth(0.3, 1, p));
-        else anim = drawPortrait(st, 1 - smooth(0.05, 0.55, 1 - p), 0, 1, now) || anim;
+      // to and from a painting: every word travels into the next facet's picture and becomes one of its words
+      const e = Math.min(1, Math.max(0, (b.e - 0.02) / 0.96));
+      const parts = b.a === b.b || e <= 0 ? [[b.a, 1]] : e >= 1 ? [[b.b, 1]] : [[b.a, 1 - b.e], [b.b, b.e]];
+      if (parts.length === 1 || REDUCED.matches) {
+        clearTravel();
+        for (const [st, p] of parts) {
+          if (isArt(st)) ARTS[st].show(p);
+          else anim = drawPortrait(st, p, 0, 1, now) || anim;
+        }
+      } else {
+        // behind the travellers only the grounds crossfade: the paintings' faint surroundings, the portraits' scenes
+        const sdim = 1 - 0.7 * find;
+        for (const [st, p] of parts) {
+          if (isArt(st)) ARTS[st].ground(p);
+          else { const L = layoutFor(st); if (L.scene) { ctx.globalAlpha = p * sdim; ctx.drawImage(L.scene, 0, 0, W, H); ctx.globalAlpha = 1; } }
+        }
+        drawTravel(b.a, b.b, e, 1 - 0.78 * find);
       }
       ART_LIST.forEach(A => { if (!parts.some(([st]) => st === A.state)) A.show(0); });
     } else if (b.b !== b.a && b.e > 0 && b.e < 1 && !REDUCED.matches) {
@@ -470,7 +554,7 @@
       anim = drawPortrait(b.a, 1 - b.e, 0, 1, now) || anim;
       anim = drawPortrait(b.b, b.e, 0, 1, now) || anim;
     } else anim = drawPortrait(b.a, 1, 0, 1, now) || anim;
-    if (!isArt(b.a) && !isArt(b.b)) ART_LIST.forEach(A => A.show(0));
+    if (!isArt(b.a) && !isArt(b.b)) { ART_LIST.forEach(A => A.show(0)); clearTravel(); }
     syncState(view.state); placeNotes(b);
     // the line is only there while a facet is settled; it fades through the crossfade
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
@@ -541,7 +625,7 @@
   }
   // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
   function warm() { warmGen++; run(jobsFor(STATES), 7); }
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); sizeTravel(); travelPairs.clear(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
   const local = e => { if (isArt(view.state)) return [-1e6, -1e6]; const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
@@ -954,7 +1038,7 @@
       new Promise(r => setTimeout(r, 2500))]);
     await wp.init(window.PORTRAITS);
     geometry();
-    await Promise.all(ART_LIST.map(A => A.loaded)); ART_LIST.forEach(A => { A.place(); A.build(); });
+    await Promise.all(ART_LIST.map(A => A.loaded)); ART_LIST.forEach(A => { A.place(); A.build(); }); sizeTravel();
     // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
     // the shuffles between them); the rest is prepared in the background once the page is open
     const bar = $('.splash__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
