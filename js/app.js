@@ -127,7 +127,7 @@
   // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
   // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
-  const WORD_SCALE = 1.7, WORD_SCALE_MOBILE = 1.15;   // the paintings' words, relative to each painting's row count (artRows); phones' pictures are smaller
+  // word size: one on-screen size for every painting, set in build() (wordPx)
   const LARGE_WORDS = false;   // larger words formed inside the paintings (feature lists in data.js); off: every word one size
   const makeArt = (state, f, fi) => {
     const root = document.documentElement, sec = () => $(`.flow [data-state="${state}"]`);
@@ -184,7 +184,7 @@
       g.clearRect(0, 0, W2, H2);
       if (f.artScene.paint) {
         // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
-        g.globalAlpha = 0.84; g.filter = `brightness(0.88) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+        g.globalAlpha = 0.84 * (f.artScene.dim || 1); g.filter = `brightness(${0.88 * (f.artScene.dim ? 0.82 : 1)}) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
       } else {
         g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
         g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
@@ -285,7 +285,8 @@
 
       // the row grid: every line the same height
       // every word one size (faces a little finer, so they stay recognisable), set large enough to read
-      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64) * (mob ? WORD_SCALE_MOBILE : WORD_SCALE), step = body * CAP + body * 0.1, y0 = body * CAP;
+      // every portrait's words are one size on screen, whatever the painting's size (faces finer), so they read as one design
+      const wordPx = mob ? 5.2 : Math.min(9.6, Math.max(7.4, innerHeight * 0.0098)), body = wordPx * D, step = body * CAP + body * 0.1, y0 = body * CAP;
       // The larger words (desktop) are not laid over the picture: their letters are made of the small words themselves,
       // set finer and closer inside each letter and a step brighter, with the words just round the letters dimmed a little,
       // so a word appears out of the texture from a distance and is all small words close up. One main word per picture,
