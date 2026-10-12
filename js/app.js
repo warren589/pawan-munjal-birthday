@@ -969,6 +969,7 @@
   // into the full letter as it settles. Only the letters that land near the top of the grid take part in the scatter;
   // the rest simply fade in at their place, which keeps the number of moving cards small.
   const board = (() => {
+    const yearNav = document.createElement('nav'); yearNav.className = 'wyears'; yearNav.setAttribute('aria-label', 'Messages by year'); document.body.appendChild(yearNav);
     const sec = $('.wall'), pin = $('.wall__pin'), stage = $('.wall__stage'), cardsEl = $('.wall__cards'), head = $('.wall__head'), rest = $('.wall__rest');
     const HOLD = 0.4, MORPH = 1.0;            // viewport heights: scattered and held, then the move into the grid
     let cards = [], heads = [], itemYears = [], vw = 0, vh = 0, gTop = 0, raf = 0, lastW = 0, mob = false, side = 0;
@@ -1006,6 +1007,8 @@
       cardsEl.innerHTML = items.map(m => cardHTML(m, false)).join('') + deco.map(m => cardHTML(m, true)).join('')
         + years.map(y => { const n = items.filter(m => m.year === y).length; return `<header class="wyear" data-y="${y}"><h3>${y}</h3><p>${n} ${n === 1 ? 'message' : 'messages'}</p></header>`; }).join('');
       heads = $$('.wyear', cardsEl).map(el => ({ el, year: +el.dataset.y }));
+      // the years as a small navigation beside the heading: jump straight to any year's letters
+      yearNav.innerHTML = years.map(y => `<button type="button" data-year="${y}">${y}</button>`).join('');
       items.forEach((m, i) => { m._i = i; });
       itemYears = items.map(m => m.year);
       cards = $$('.wcard', cardsEl).map((el, i) => ({ el, deco: i >= items.length, bg: el.querySelector('.wcard__bg'), full: el.querySelector('.wcard__full'), short: el.querySelector('.wcard__short') }));
@@ -1102,6 +1105,17 @@
         h.el.classList.toggle('stuck', y > own + 1);
         h.el.style.transform = `translate(${side}px, ${(y + (1 - ha) * 20).toFixed(1)}px)`; h.el.style.opacity = ha; h.el.style.visibility = ha <= 0.01 ? 'hidden' : '';
       });
+      // the year navigation rides on the heading row: level with the first heading, then held under the page header
+      if (heads.length) {
+        const top = Math.max(hdr + 6, gTop + heads[0].y - after) + (1 - ha) * 20, on = ha > 0.05 && r.bottom > vh * 0.35;
+        let cur = 0; heads.forEach((h, i) => { if (gTop + h.y - after <= hdr + 60) cur = i; });
+        yearNav.style.transform = `translateY(${top.toFixed(1)}px)`; yearNav.style.right = side + 'px';
+        yearNav.style.opacity = on ? ha : 0; yearNav.classList.toggle('on', on && ha > 0.6);
+        if (yearNav.dataset.cur !== String(cur)) {
+          yearNav.dataset.cur = cur;
+          $$('button', yearNav).forEach((b, i) => { b.classList.toggle('cur', i === cur); if (i === cur) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+        }
+      }
       head.style.opacity = 1 - Math.min(1, p * 2.4);
       head.style.visibility = p > 0.45 ? 'hidden' : '';
       body.classList.toggle('on-board', r.top < vh * 0.85 && r.bottom > vh * 0.15);
@@ -1109,6 +1123,14 @@
     }
     const tick = () => { if (!raf) raf = requestAnimationFrame(draw); };
     addEventListener('scroll', tick, { passive: true });
+    // going to a year: its heading comes to rest just under the page header, its letters below
+    yearNav.addEventListener('click', e => {
+      const b = e.target.closest('[data-year]'); if (!b) return;
+      const h = heads.find(q => q.year === +b.dataset.year); if (!h) return;
+      const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr')) || 64;
+      const start = sec.getBoundingClientRect().top + scrollY + vh * (HOLD + MORPH);   // where the stage lets go of the grid
+      scrollTo({ top: start + Math.max(0, gTop + h.y - (hdr + 6)), behavior: REDUCED.matches ? 'auto' : 'smooth' });
+    });
     let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (sec.clientWidth !== lastW) build(); }, 200); });
     document.fonts.ready.then(layout);
 

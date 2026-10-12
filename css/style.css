@@ -141,6 +141,13 @@ body.finding .note.vis { opacity: calc(var(--no, 0) * .25) !important; }
 /* while stuck under the page header the heading gets a ground of its own, so the letters pass cleanly beneath it */
 .wyear.stuck { background: linear-gradient(rgba(22, 20, 21, .97) 80%, rgba(22, 20, 21, .9)); box-shadow: 0 12px 24px -12px rgba(0, 0, 0, .6), -40px 0 0 rgba(22, 20, 21, .97), 40px 0 0 rgba(22, 20, 21, .97); }
 .wyear.stuck h3 { font-size: clamp(28px, 2.6vw, 38px); }
+/* the years, as pills on the right of the heading row */
+.wyears { position: fixed; top: 0; right: 56px; z-index: 29; display: flex; gap: 6px; padding-top: 12px; opacity: 0; pointer-events: none; transition: opacity .3s; will-change: transform; }
+.wyears.on { pointer-events: auto; }
+.wyears button { border: 1px solid var(--line); background: rgba(22, 20, 21, .85); color: var(--ink-soft); border-radius: 999px; padding: 8px 14px; min-height: 36px; font: 600 13px/1 var(--sans); letter-spacing: -.01em; transition: background .25s, color .25s, border-color .25s; }
+.wyears button:hover { color: var(--ink); border-color: rgba(242, 236, 226, .4); }
+.wyears button.cur { background: var(--ink); color: #1a1718; border-color: var(--ink); }
+.wyears button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wyear h3 { margin: 0; font: 700 clamp(40px, 4vw, 60px)/1 var(--sans); letter-spacing: -.04em; color: var(--ink); }
 .wyear p { margin: 0; font: 500 12px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 /* the count, in the middle of the scattered letters, on a soft halo of paper */
@@ -350,6 +357,9 @@ body.ready .splash__scroll { opacity: 1; }
   /* phones: the logos across the top, both words on one line above his head, the figure filling the lower part */
   .splash { --fh: min(64svh, 150vw); }
   .famart { left: 0; }
+  .wyears { gap: 4px; padding-top: 10px; }
+  .wyears button { padding: 7px 9px; min-height: 32px; font-size: 12px; }
+  .wyear p { display: none; }   /* the year buttons need the room */
   .sec.painted .note { left: 0; width: auto; }
   .sec.painted .fline { font-size: 32px; }
   .splash__logo { top: calc(env(safe-area-inset-top, 0px) + 26px); translate: 0 var(--wy, 0px); }
