@@ -73,9 +73,10 @@ body.on-splash .top, body.on-splash .note { pointer-events: none !important; }
 .portrait { display: block; }
 .famart { position: absolute; left: 0; z-index: 2; pointer-events: none; opacity: 0; visibility: hidden; }
 /* the family: the painting on the left, a little wider than the portraits; the text on the right in a bold condensed sans */
-#facet-2 .note { left: 67vw; width: min(380px, 27vw); }
-#facet-2 .fline { font: 700 clamp(30px, 2.6vw, 44px)/1.04 var(--narrow); letter-spacing: -.005em; margin-bottom: 14px; }
-#facet-2 .story p { font: 400 15px/1.55 var(--sans); }
+/* painted facets */
+.sec.painted .note { left: 67vw; width: min(380px, 27vw); }
+.sec.painted .fline { font: 700 clamp(30px, 2.6vw, 44px)/1.04 var(--narrow); letter-spacing: -.005em; margin-bottom: 14px; }
+.sec.painted .story p { font: 400 15px/1.55 var(--sans); }
 .loading { position: absolute; left: 34%; top: 50%; transform: translate(-50%, -50%); margin: 0; font: 500 11px var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); transition: opacity .6s; }
 body.ready .loading { opacity: 0; }
 .loupe {
@@ -338,8 +339,8 @@ body.ready .splash__scroll { opacity: 1; }
   /* phones: the logos across the top, both words on one line above his head, the figure filling the lower part */
   .splash { --fh: min(64svh, 150vw); }
   .famart { left: 0; }
-  #facet-2 .note { left: 0; width: auto; }
-  #facet-2 .fline { font-size: 32px; }
+  .sec.painted .note { left: 0; width: auto; }
+  .sec.painted .fline { font-size: 32px; }
   .splash__logo { top: calc(env(safe-area-inset-top, 0px) + 26px); translate: 0 var(--wy, 0px); }
   .splash__logo--hero { left: 20px; width: 92px; }
   .splash__logo--vida { right: 20px; width: 100px; }

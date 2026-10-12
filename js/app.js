@@ -80,7 +80,7 @@
     if (qi < 0) qi = messages.findIndex((m, k) => !quoted.has(k) && m.facets.has(f.code));
     if (qi < 0) qi = 0; quoted.add(qi); const q = messages[qi];
     chapters.insertAdjacentHTML('beforeend', `
-      <section class="sec" data-state="${i}" id="facet-${i}" style="--ink:${tint(f.ink[0])};--ink2:${f.ink[0]}">
+      <section class="sec${f.art ? ' painted' : ''}" data-state="${i}" id="facet-${i}" style="--ink:${tint(f.ink[0])};--ink2:${f.ink[0]}">
         <div class="note fnote">
           <p class="eyebrow"><b>${String(i + 1).padStart(2, '0')}</b> / 07 <span>${f.name}</span></p>
           <h2 class="fline">${f.line}</h2>
@@ -119,28 +119,28 @@
   }
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
 
-  // ---------------- the family: the painting itself, set in words ----------------
-  // One facet is shown differently. The family is cut out of the painting and set in close rows of small words in the
+  // ---------------- painted facets: the painting itself, set in words ----------------
+  // Some facets are shown differently (the family, the golfer). The subject is cut out of an oil painting and set in close rows of small words in the
   // painting's own colours, with its brushwork faintly between the letters; the faces have their own finer rows, blended
   // in softly, so each one stays recognisable. Its background is only a faint trace, as with the other portraits. On
   // desktop a few larger words for this facet are set into the family's clothes on the same row grid: each one spans
   // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
   // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
-  const ART = (() => {
-    const fi = FACETS.findIndex(f => f.art); if (fi < 0) return null;
-    const f = FACETS[fi], state = String(fi), el = $('.famart'), x = el.getContext('2d'), root = document.documentElement;
+  const makeArt = fi => {
+    const f = FACETS[fi], state = String(fi), root = document.documentElement;
+    const el = document.createElement('canvas'), x = el.getContext('2d');
+    el.className = 'famart'; el.setAttribute('aria-label', `${f.name}: an oil painting, set in words. Hover or tap a word to read the message behind it.`);
+    $('.stage').appendChild(el);
     const img = new Image(), mimg = new Image(), bimg = new Image();
-    let built = '', box = null, shown = -1, words = [], layers = null, D = 1;
+    let built = '', box = null, shown = -1, words = [], layers = null, D = 1, hl = null, lastQ = 0;
     img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
     const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode()]).catch(() => {});
-    // the painting file is cropped to the family: [left, width] in pixels of the original painting, and its full width
-    const [c0, cW, oW] = f.artCrop, toCrop = u => (u * oW - c0) / cW;
     function place() {
-      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || cW / 733;
+      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
       let w, h, left, top;
-      if (MOBILE.matches) { h = H; w = h * ar; left = 0; top = hdr + 2; }
+      if (MOBILE.matches) { h = H; w = h * ar; left = Math.max(0, (vw - w) / 2); top = hdr + 2; }   // wider than the screen: it pans
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
         const zl = vw * 0.025, zr = vw * 0.63;
@@ -157,7 +157,10 @@
       const cw = Math.round(box.w * D), ch = Math.round(box.h * D), mob = MOBILE.matches, key = cw + 'x' + ch + mob;
       if (key === built) return; built = key;
       el.width = cw; el.height = ch;
-      const R = seeded(fi * 31 + 7), pool = [...new Set(spec(state).words.map(w => w.t.toUpperCase()))];
+      const R = seeded(fi * 31 + 7), sw = spec(state).words, pool = [...new Set(sw.map(w => w.t.toUpperCase()))];
+      // each word stands for a message that contains it, as in the portraits
+      const msgs = new Map(); sw.forEach(w => { const k = w.t.toUpperCase(); if (!msgs.has(k)) msgs.set(k, []); msgs.get(k).push(w.m); });
+      const msgFor = t => { const l = msgs.get(t) || [0]; return l[(R() * l.length) | 0]; };
       const pick = () => pool[(R() * pool.length) | 0];
       const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; return [c, g]; };
       const font = fs => `700 ${fs}px ${window.WP_FONT}`;
@@ -168,8 +171,7 @@
       const mc = document.createElement('canvas'); mc.width = mimg.naturalWidth; mc.height = mimg.naturalHeight;
       const mx = mc.getContext('2d'); mx.drawImage(mimg, 0, 0); const md = mx.getImageData(0, 0, mc.width, mc.height).data;
       const onFamily = (px, py) => md[(Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4] > 150;
-      const ex = 65 / 2000, ey = 9 / 733, sx = 1830 / 2000, sy = 724 / 733;   // the facet's head boxes are given relative to the group
-      const faces = f.heads.map(([hx, hy, rx, ry]) => [toCrop(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx * oW / cW * cw * 1.3, ry * sy * ch * 1.25]);
+      const faces = f.artHeads.map(([hx, hy, rx, ry]) => [hx * cw, hy * ch, rx * cw * 1.3, ry * ch * 1.25]);
       const inFace = (px, py, k = 1) => faces.some(([a, b, rx, ry]) => ((px - a) / (rx * k)) ** 2 + ((py - b) / (ry * k)) ** 2 < 1);
       words = [];
 
@@ -200,10 +202,10 @@
 
       // the row grid: every line the same height; a large word's capitals span whole lines, from the top of one to the
       // baseline of another
-      const body = ch / (mob ? 72 : 64), step = body * CAP + body * 0.14, y0 = body * CAP, sp = body * 0.22;
+      const body = ch / (mob ? f.artRowsMobile || 72 : f.artRows || 64), step = body * CAP + body * 0.14, y0 = body * CAP, sp = body * 0.22;
       const big = [];
       if (!mob) for (const [t, u, v, maxW] of f.feature || []) {
-        const cx = toCrop(u) * cw, mw = maxW * oW / cW * cw;
+        const cx = u * cw, mw = maxW * cw;
         for (let n = 7; n >= 2; n--) {
           const fs = ((n - 1) * step + body * CAP) / CAP, w = widthOf(t, fs);
           if (w > mw) continue;
@@ -260,14 +262,14 @@
       const fade = (g, x0, y0_, x1, y1, a, b2) => { const gr = g.createLinearGradient(x0, y0_, x1, y1); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(a, '#000'); gr.addColorStop(b2, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, cw, ch); };
       fade(sg, 0, 0, cw, 0, 0.18, 0.82); fade(sg, 0, 0, 0, ch, 0.3, 0.7);
       // everything fades out softly towards the bottom, rather than ending on a cut
-      for (const g of [bg, fg, gg, ug]) fade(g, 0, 0, 0, ch, 0, 0.7);
+      for (const g of [bg, fg, gg, ug]) fade(g, 0, 0, 0, ch, 0, f.artFade || 0.7);
       for (const g of [bg, fg, gg, ug, sg]) g.globalCompositeOperation = 'source-over';
       layers = { b: bc, f: fc, g: gc, under: uc, scene: sc };
       // each word's journey when the painting comes apart: a drift up and to the side, the large words last
       words.forEach(w => {
         const a = -Math.PI * (0.25 + R() * 0.5) + (R() - 0.5) * 0.6;
         w.dx = Math.cos(a) * (60 + R() * 220) * D; w.dy = Math.sin(a) * (60 + R() * 200) * D; w.rot = (R() - 0.5) * 0.5;
-        w.d = w.big ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
+        w.m = msgFor(w.t); w.d = w.big ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
       });
       shown = -1;
     }
@@ -278,7 +280,11 @@
       if (!layers) return;
       x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(layers.scene, 0, 0);
       x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
-      if (q <= 0) { x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.g, 0, 0); return; }
+      if (q <= 0) {
+        x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); x.drawImage(layers.g, 0, 0);
+        if (hl) { x.fillStyle = '#f2ece2'; x.globalAlpha = 0.95; x.fillRect(hl.x - D, hl.y + hl.fs * 0.14, hl.w + 2 * D, Math.max(1.5 * D, hl.fs * 0.07)); x.globalAlpha = 1; }   // the word you are pointing at
+        return;
+      }
       for (const w of words) {
         const p = Math.min(1, Math.max(0, (q - w.d) / 0.55)), e = easeIO(p), a = 1 - p * p;
         if (a <= 0.01) continue;
@@ -301,15 +307,46 @@
       if (v <= 0.002 || !box) return;
       const q = REDUCED.matches ? 0 : 1 - v;
       if (REDUCED.matches) el.style.opacity = v;
-      if (q !== painted) { painted = q; paint(q); }
-      if (mob) {
+      if (q !== painted) { painted = q; paint(q); } lastQ = q;
+      el.style.pointerEvents = v > 0.9 ? 'auto' : 'none';   // its words can be read once it has gathered
+      if (mob && box.w > innerWidth) {
         const r = $('#facet-' + fi).getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
         el.style.transform = `translateX(${(-(box.w - innerWidth) * p).toFixed(1)}px)`;
       } else el.style.transform = 'none';
     }
-    return { state, loaded, place, build: () => { build(); painted = -1; }, show };
-  })();
-  const isArt = s => !!ART && s === ART.state;
+    // ---- reading its words: hover shows the word, a click or tap opens the message behind it ----
+    function hit(cx, cy, pad) {
+      const r = el.getBoundingClientRect(); if (!r.width) return null;
+      const px = (cx - r.left) * el.width / r.width, py = (cy - r.top) * el.height / r.height, pd = pad * D;
+      let best = null;
+      for (const w of words) if (px >= w.x - pd && px <= w.x + w.w + pd && py >= w.top - pd && py <= w.top + w.h + pd) { if (w.big) return w; if (!best || w.tag === 'f') best = w; }
+      return best;
+    }
+    const rectOf = w => { const r = el.getBoundingClientRect(), k = r.width / el.width; return { left: r.left + w.x * k, top: r.top + w.top * k, width: w.w * k, height: w.h * k }; };
+    const highlight = w => { if (w === hl) return; hl = w; painted = -1; paint(lastQ); };
+    el.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'mouse') return;
+      const w = hit(e.clientX, e.clientY, 1);
+      el.style.cursor = w ? 'pointer' : 'default';
+      if (w) {
+        const fr = frame.getBoundingClientRect(), wr = rectOf(w);
+        loupe.textContent = w.t; loupe.classList.remove('mine');
+        loupe.style.transform = `translate(${wr.left + wr.width / 2 - fr.left}px, ${wr.top - 8 - fr.top}px)`;
+        loupe.classList.add('on');
+      } else loupe.classList.remove('on');
+      highlight(w || (picked && picked.art === api ? picked.w : null));
+    });
+    el.addEventListener('pointerleave', () => { loupe.classList.remove('on'); highlight(picked && picked.art === api ? picked.w : null); });
+    el.addEventListener('click', e => {
+      const w = hit(e.clientX, e.clientY, e.pointerType === 'mouse' ? 1 : 6);
+      if (w) { picked = { state, w, art: api }; highlight(w); loupe.classList.remove('on'); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
+    });
+    const api = { state, loaded, place, build: () => { build(); painted = -1; }, show, rectOf, unpick: () => highlight(null) };
+    return api;
+  };
+  const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(i); });
+  const ART_LIST = Object.values(ARTS);
+  const isArt = s => !!ARTS[s];
 
   // visitor words: { id, t, facets, m, arrived:{state:time}, landed }
   const visitor = [];
@@ -373,7 +410,7 @@
   let annotFor = null;
   function placeAnnot(alpha = 1) {
     const s = view.state, fi = /^\d$/.test(s) ? +s : -1, f = FACETS[fi];
-    const on = f && f.anchor && f.img && !MOBILE.matches && !body.classList.contains('composing') && !body.classList.contains('reading-word');
+    const on = f && f.anchor && f.img && !f.art && !MOBILE.matches && !body.classList.contains('composing') && !body.classList.contains('reading-word');
     if (!on) { annot.style.opacity = 0; annotFor = null; return; }
     const sec = $('#facet-' + fi), line = sec.querySelector('.fline');
     const L = layoutFor(s), r = cv.getBoundingClientRect(), sc = r.width / W, lr = line.getBoundingClientRect();
@@ -402,10 +439,13 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     let anim = find !== findTarget;
     if (isArt(b.a) || isArt(b.b)) {
-      // to and from the family painting: the portrait fades as the painting rises into place, and back
-      const fa = b.a === b.b ? 1 : isArt(b.b) ? b.e : 1 - b.e, other = isArt(b.a) ? b.b : b.a;
-      if (!isArt(other)) anim = drawPortrait(other, 1 - smooth(0.05, 0.55, fa), 0, 1, now) || anim;
-      ART.show(smooth(0.3, 1, fa));
+      // to and from a painting: a portrait fades as the painting gathers from its words, and back
+      const parts = b.a === b.b ? [[b.a, 1]] : [[b.a, 1 - b.e], [b.b, b.e]];
+      for (const [st, p] of parts) {
+        if (isArt(st)) ARTS[st].show(smooth(0.3, 1, p));
+        else anim = drawPortrait(st, 1 - smooth(0.05, 0.55, 1 - p), 0, 1, now) || anim;
+      }
+      ART_LIST.forEach(A => { if (!parts.some(([st]) => st === A.state)) A.show(0); });
     } else if (b.b !== b.a && b.e > 0 && b.e < 1 && !REDUCED.matches) {
       // shuffle: every word of one portrait travels into the next and becomes one of its words
       const A = layoutFor(b.a), B = layoutFor(b.b);
@@ -430,7 +470,7 @@
       anim = drawPortrait(b.a, 1 - b.e, 0, 1, now) || anim;
       anim = drawPortrait(b.b, b.e, 0, 1, now) || anim;
     } else anim = drawPortrait(b.a, 1, 0, 1, now) || anim;
-    if (ART && !isArt(b.a) && !isArt(b.b)) ART.show(0);
+    if (!isArt(b.a) && !isArt(b.b)) ART_LIST.forEach(A => A.show(0));
     syncState(view.state); placeNotes(b);
     // the line is only there while a facet is settled; it fades through the crossfade
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
@@ -501,12 +541,12 @@
   }
   // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
   function warm() { warmGen++; run(jobsFor(STATES), 7); }
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); if (ART) { ART.place(); ART.build(); } if (W !== ow || H !== oh) warm(); kick(); }, 150); });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
   const local = e => { if (isArt(view.state)) return [-1e6, -1e6]; const r = cv.getBoundingClientRect(), L = layoutFor(view.state); return [(e.clientX - r.left) * W / r.width - L.ox, (e.clientY - r.top) * H / r.height - L.oy]; };
   function wordAt(x, y, pad) {
-    const s = view.state; if (isArt(s)) return null;   // the family painting has no single words to point at
+    const s = view.state; if (isArt(s)) return null;   // a painting's words are read from its own canvas
     const L = layoutFor(s);
     for (const v of visitor) {
       const sl = showsIn(v, s) && v.arrived[s] && L.slots.get(v.id);
@@ -538,12 +578,16 @@
   const reader = $('.reader'), lead = $('.lead');
   function closeReader() {
     if (!body.classList.contains('reading-word')) return;
-    body.classList.remove('reading-word'); picked = null; lead.classList.remove('on'); annotFor = null; kick();
+    body.classList.remove('reading-word'); if (picked && picked.art) picked.art.unpick(); picked = null; lead.classList.remove('on'); annotFor = null; kick();
   }
   function placeLead() {
     if (!picked || !body.classList.contains('reading-word')) return;
-    const L = layoutFor(picked.state), r = cv.getBoundingClientRect(), sc = r.width / W, w = picked.w;
-    const x1 = r.left + (L.ox + w.x + w.w) * sc + 4, y1 = r.top + (L.oy + w.y + w.h * 0.6) * sc;
+    let x1, y1;
+    if (picked.art) { const q = picked.art.rectOf(picked.w); x1 = q.left + q.width + 4; y1 = q.top + q.height * 0.55; }
+    else {
+      const L = layoutFor(picked.state), r = cv.getBoundingClientRect(), sc = r.width / W, w = picked.w;
+      x1 = r.left + (L.ox + w.x + w.w) * sc + 4; y1 = r.top + (L.oy + w.y + w.h * 0.6) * sc;
+    }
     const rr = reader.getBoundingClientRect(), x2 = rr.left - 18, y2 = rr.top + 64;
     lead.setAttribute('d', `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`);
   }
@@ -552,7 +596,7 @@
   function readerHTML(word, mi) {
     const m = messages[mi] || messages[0], codes = m.mine ? [...m.facets] : facetsOf(word);
     const rel = messages.map((x, i) => i).filter(i => i !== mi && !messages[i].mine && messages[i].words.includes(word)).slice(0, 3);
-    const re = new RegExp(`\\b(${[...ALIAS].filter(([, v]) => v === word).map(([k]) => k).join('|')})\\w*`, 'gi');
+    const forms = [...ALIAS].filter(([, v]) => v === word).map(([k]) => k), re = new RegExp(`\\b(${(forms.length ? forms : [word.toLowerCase()]).join('|')})\\w*`, 'gi');   // never an empty pattern, which would mark every word
     const text = esc(m.text).replace(re, '<u>$&</u>');
     return `
       <p class="eyebrow">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
@@ -910,7 +954,7 @@
       new Promise(r => setTimeout(r, 2500))]);
     await wp.init(window.PORTRAITS);
     geometry();
-    if (ART) { await ART.loaded; ART.place(); ART.build(); }
+    await Promise.all(ART_LIST.map(A => A.loaded)); ART_LIST.forEach(A => { A.place(); A.build(); });
     // behind the loading screen: only what the first screens need (the opening portrait and the first two facets, with
     // the shuffles between them); the rest is prepared in the background once the page is open
     const bar = $('.splash__bar i'), order = [...new Set([blend().a, blend().b, ...STATES])];
