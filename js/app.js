@@ -127,8 +127,8 @@
   // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
   // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
-  const makeArt = fi => {
-    const f = FACETS[fi], state = String(fi), root = document.documentElement;
+  const makeArt = (state, f, fi) => {
+    const root = document.documentElement, sec = () => $(`.flow [data-state="${state}"]`);
     const el = document.createElement('canvas'), x = el.getContext('2d');
     el.className = 'famart'; el.setAttribute('aria-label', `${f.name}: an oil painting, set in words. Hover or tap a word to read the message behind it.`);
     $('.stage').appendChild(el);
@@ -143,7 +143,7 @@
       if (MOBILE.matches) { h = H; w = h * ar; left = Math.max(0, (vw - w) / 2); top = hdr + 2; }   // wider than the screen: it pans
       else {
         // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
-        const zl = vw * 0.025, zr = vw * 0.63;
+        const zl = vw * 0.025, zr = vw * (state === 'hero' ? 0.585 : 0.63);   // the opening note sits a little further left
         w = Math.min(zr - zl, (vh - hdr - 60) * ar); h = w / ar;
         left = zl + (zr - zl - w) / 2; top = Math.max(hdr + 12, vh / 2 - h * 0.44);
       }
@@ -249,7 +249,9 @@
       // fill the counters and the spaces between its letters
       bg.globalCompositeOperation = 'destination-out'; bg.fillStyle = bg.strokeStyle = '#000'; bg.lineJoin = 'round';
       big.forEach(q => { bg.font = font(q.fs); bg.lineWidth = body * 0.42; bg.fillText(q.t, q.x, q.y); bg.strokeText(q.t, q.x, q.y); });
-      for (const g of [bg, fg, gg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      // the large words take the painting's colour softened, so a dark brushstroke across one never cuts a letter in two
+      gg.globalCompositeOperation = 'source-in'; gg.filter = `blur(${Math.round(body * 0.9)}px) brightness(1.18) saturate(1.1)`; gg.drawImage(img, 0, 0, cw, ch); gg.filter = 'none';
       // the large words a touch lighter than the painting under them, so they read first
       gg.globalCompositeOperation = 'source-atop'; gg.globalAlpha = 0.12; gg.fillStyle = '#fff'; gg.fillRect(0, 0, cw, ch); gg.globalAlpha = 1;
       // the brushwork under the words, on the family only
@@ -314,7 +316,7 @@
     // on a phone a painting wider than the screen pans across as you scroll through its section
     function pan() {
       if (MOBILE.matches && box && box.w > innerWidth) {
-        const r = $('#facet-' + fi).getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
+        const r = sec().getBoundingClientRect(), p = smooth(0.12, 0.88, (innerHeight * 0.5 - r.top) / r.height);
         el.style.transform = `translateX(${(-(box.w - innerWidth) * p).toFixed(1)}px)`;
       } else el.style.transform = 'none';
     }
@@ -359,10 +361,18 @@
       const w = hit(e.clientX, e.clientY, e.pointerType === 'mouse' ? 1 : 6);
       if (w) { picked = { state, w, art: api }; highlight(w); loupe.classList.remove('on'); openSheet(w.t, w.m); } else { closeReader(); highlight(null); }
     });
-    const api = { state, el, loaded, place, build: () => { build(); painted = -1; }, show, ground, travellers, rectOf, unpick: () => highlight(null) };
+    // where a visitor's word lands in the painting: one of its small body words, near the middle, chosen by the word's id
+    function spot(id) {
+      const mid = words.filter(w => w.tag === 'b' && !w.big && w.y > el.height * 0.3 && w.y < el.height * 0.75 && Math.abs(w.x + w.w / 2 - el.width / 2) < el.width * 0.25);
+      if (!mid.length) return null;
+      let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      return rectOf(mid[h % mid.length]);
+    }
+    const api = { state, el, loaded, spot, place, build: () => { build(); painted = -1; }, show, ground, travellers, rectOf, unpick: () => highlight(null) };
     return api;
   };
-  const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(i); });
+  const ARTS = {}; FACETS.forEach((f, i) => { if (f.art) ARTS[String(i)] = makeArt(String(i), f, i); });
+  if (window.HERO_ART) ARTS.hero = makeArt('hero', window.HERO_ART, 11);   // the opening portrait is a painting too
   const ART_LIST = Object.values(ARTS);
   const isArt = s => !!ARTS[s];
 
@@ -777,7 +787,9 @@
         const sr = srcEl.getBoundingClientRect(), cs = getComputedStyle(srcEl), fs0 = parseFloat(cs.fontSize);
         const inHere = !here || v.facets.includes(here);
         let tx, ty, size, railBtn = null;
-        if (inHere) {
+        const art = inHere && isArt(s) && ARTS[s].spot(v.id);
+        if (art) { tx = art.left + art.width / 2; ty = art.top + art.height / 2; size = art.height * 0.8; }
+        else if (inHere) {
           const slot = wp.slotFor(L, v.id, v.t.toUpperCase());
           tx = rect.left + (L.ox + slot.x + slot.w / 2) * sc; ty = rect.top + (L.oy + slot.y + slot.h / 2) * sc; size = slot.fs * sc;
         } else {
