@@ -120,29 +120,33 @@
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
 
   // ---------------- the family: the painting itself, set in words ----------------
-  // One facet is shown differently. The family is cut out of the painting and set in tightly packed rows of small words
-  // in the painting's own colours (finer across the faces, so each one stays recognisable), with the brushwork faintly
-  // between the letters. Its background is only a faint trace, as with the other portraits. On desktop a few larger
-  // words for this facet sit on the same row grid, set into the family's clothes. The group stands on the bottom edge
-  // of the screen like every portrait, text on the right. Scrolling in or out, it comes apart into its words.
+  // One facet is shown differently. The family is cut out of the painting and set in close rows of small words in the
+  // painting's own colours, with its brushwork faintly between the letters; the faces have their own finer rows, blended
+  // in softly, so each one stays recognisable. Its background is only a faint trace, as with the other portraits. On
+  // desktop a few larger words for this facet are set into the family's clothes on the same row grid: each one spans
+  // whole rows exactly, and the small words on either side are spaced to meet it, so nothing leaves a gap. The group
+  // sits level with the text and fades out softly at the bottom. Scrolling in or out, it comes apart into its words.
   // Phone: as tall as the portraits, panning across the family as you scroll.
   const ART = (() => {
     const fi = FACETS.findIndex(f => f.art); if (fi < 0) return null;
     const f = FACETS[fi], state = String(fi), el = $('.famart'), x = el.getContext('2d'), root = document.documentElement;
     const img = new Image(), mimg = new Image(), bimg = new Image();
-    let built = '', box = null, shown = -1, words = [], under = null, layer = null, scene = null, D = 1;
+    let built = '', box = null, shown = -1, words = [], layers = null, D = 1;
     img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
     const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode()]).catch(() => {});
-    // the painting file is cropped to the family: x from 50 to 1920 of the original 2000 × 733
-    const CX0 = 50 / 2000, CXW = 1870 / 2000;
-    const toCrop = u => (u - CX0) / CXW;
+    // the painting file is cropped to the family: [left, width] in pixels of the original painting, and its full width
+    const [c0, cW, oW] = f.artCrop, toCrop = u => (u * oW - c0) / cW;
     function place() {
-      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1870 / 733;
+      const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || cW / 733;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
-      let w, h, left;
-      if (MOBILE.matches) { h = H; w = h * ar; left = 0; }
-      else { w = Math.min(vw * 0.62, (vh - hdr - 40) * ar); h = w / ar; left = vw * 0.02; }
-      const top = MOBILE.matches ? hdr + 2 : vh - h;   // desktop: standing on the bottom edge, like every portrait
+      let w, h, left, top;
+      if (MOBILE.matches) { h = H; w = h * ar; left = 0; top = hdr + 2; }
+      else {
+        // centred in the space left of the text and level with it (the faded lower edge makes the group read a little high)
+        const zl = vw * 0.025, zr = vw * 0.63;
+        w = Math.min(zr - zl, (vh - hdr - 60) * ar); h = w / ar;
+        left = zl + (zr - zl - w) / 2; top = Math.max(hdr + 12, vh / 2 - h * 0.44);
+      }
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
       shown = -1;
@@ -153,75 +157,117 @@
       const cw = Math.round(box.w * D), ch = Math.round(box.h * D), mob = MOBILE.matches, key = cw + 'x' + ch + mob;
       if (key === built) return; built = key;
       el.width = cw; el.height = ch;
-      const R = seeded(fi * 31 + 7), pool = spec(state).words.map(w => w.t.toUpperCase());
+      const R = seeded(fi * 31 + 7), pool = [...new Set(spec(state).words.map(w => w.t.toUpperCase()))];
+      const pick = () => pool[(R() * pool.length) | 0];
+      const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; return [c, g]; };
+      const font = fs => `700 ${fs}px ${window.WP_FONT}`;
+      const probe = document.createElement('canvas').getContext('2d');
+      const widths = new Map(), widthOf = (t, fs) => { const k = fs + t; let w = widths.get(k); if (w === undefined) { probe.font = font(fs); w = probe.measureText(t).width; widths.set(k, w); } return w; };
+      probe.font = font(100); const CAP = (probe.measureText('H').actualBoundingBoxAscent || 72) / 100;   // capitals only: a line is its cap height
+      // where the family is (a small copy of the cut-out's outline), and where the faces are
       const mc = document.createElement('canvas'); mc.width = mimg.naturalWidth; mc.height = mimg.naturalHeight;
       const mx = mc.getContext('2d'); mx.drawImage(mimg, 0, 0); const md = mx.getImageData(0, 0, mc.width, mc.height).data;
-      const onFamily = (px, py) => { const i = (Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4; return md[i] > 90; };
-      const ex = 65 / 2000, ey = 9 / 733, sx = 1830 / 2000, sy = 724 / 733;
-      const faces = f.heads.map(([hx, hy, rx, ry]) => [toCrop(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx / CXW * cw * 1.3, ry * sy * ch * 1.25]);
-      const inFace = (px, py, pad = 1) => faces.some(([a, b, rx, ry]) => ((px - a) / (rx * pad)) ** 2 + ((py - b) / (ry * pad)) ** 2 < 1);
-      const font = fs => `700 ${fs}px ${window.WP_FONT}`;
-      const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.textBaseline = 'alphabetic'; return [c, g]; };
-      // one row grid for everything: small words on every line, larger words spanning several lines exactly
-      const body = ch / (mob ? 72 : 66), step = body * 0.84, gap = body * 0.2, y0 = body * 0.78;
-      const [t, tx] = mk();
+      const onFamily = (px, py) => md[(Math.min(mc.height - 1, Math.max(0, (py / ch * mc.height) | 0)) * mc.width + Math.min(mc.width - 1, Math.max(0, (px / cw * mc.width) | 0))) * 4] > 150;
+      const ex = 65 / 2000, ey = 9 / 733, sx = 1830 / 2000, sy = 724 / 733;   // the facet's head boxes are given relative to the group
+      const faces = f.heads.map(([hx, hy, rx, ry]) => [toCrop(ex + hx * sx) * cw, (ey + hy * sy) * ch, rx * sx * oW / cW * cw * 1.3, ry * sy * ch * 1.25]);
+      const inFace = (px, py, k = 1) => faces.some(([a, b, rx, ry]) => ((px - a) / (rx * k)) ** 2 + ((py - b) / (ry * k)) ** 2 < 1);
       words = [];
+
+      // a line of words from a to b. A side marked tight meets a large word: the line starts or ends exactly there. With
+      // both sides tight the words are chosen to fill the space, then spaced (and at most very slightly widened or
+      // narrowed) so the line runs exactly from one to the other.
+      function line(fs, y, a, b, tightA, tightB, tag) {
+        const space = fs * 0.22, put = (t, px, s) => words.push({ t, x: px, y, w: widthOf(t, fs) * s, fs, s, tag });
+        if (!tightA && !tightB) { let px = a - R() * fs * 4; while (px < b) { const t = pick(); put(t, px, 1); px += widthOf(t, fs) + space; } return; }
+        if (tightA && !tightB) { let px = a; while (px < b) { const t = pick(); put(t, px, 1); px += widthOf(t, fs) + space; } return; }
+        if (!tightA) { let px = b; while (px > a) { const t = pick(), w = widthOf(t, fs); px -= w; put(t, px, 1); px -= space; } return; }
+        const L = b - a, run = []; let sum = 0;
+        for (let miss = 0; miss < 12;) {
+          const t = pick(), w = widthOf(t, fs);
+          if (sum + w + space * run.length <= L) { run.push(t); sum += w; miss = 0; } else miss++;
+        }
+        // the last gap: the word that best fills what is left
+        const left = L - sum - space * run.length;
+        let best = null, bd = Infinity;
+        for (const t of pool) { const d = Math.abs(widthOf(t, fs) - left); if (d < bd) { bd = d; best = t; } }
+        if (best && widthOf(best, fs) < left * 1.14 + fs * 0.4) { run.push(best); sum += widthOf(best, fs); }
+        if (!run.length) return;
+        const gaps = run.length - 1, s = Math.min(1.08, Math.max(0.9, (L - space * gaps) / sum));
+        const extra = gaps ? Math.max(-space * 0.5, (L - sum * s - space * gaps) / gaps) : 0;
+        let px = gaps ? a : a + (L - sum * s) / 2;
+        for (const t of run) { put(t, px, s); px += widthOf(t, fs) * s + space + extra; }
+      }
+
+      // the row grid: every line the same height; a large word's capitals span whole lines, from the top of one to the
+      // baseline of another
+      const body = ch / (mob ? 72 : 64), step = body * CAP + body * 0.14, y0 = body * CAP, sp = body * 0.22;
       const big = [];
-      if (!mob) (f.feature || []).forEach(([w0, u, v, maxW]) => {
-        const cxp = toCrop(u) * cw, mw = maxW / CXW * cw;
+      if (!mob) for (const [t, u, v, maxW] of f.feature || []) {
+        const cx = toCrop(u) * cw, mw = maxW * oW / cW * cw;
         for (let n = 7; n >= 2; n--) {
-          const fs = (n * step - step * 0.2) / 0.72;   // cap height fills n rows, less one row's gap
-          tx.font = font(fs); const w = tx.measureText(w0).width;
+          const fs = ((n - 1) * step + body * CAP) / CAP, w = widthOf(t, fs);
           if (w > mw) continue;
-          const k = Math.round((v * ch + n * step / 2 - y0) / step), by = y0 + k * step, px = cxp - w / 2, top = by - fs * 0.72;
-          let fits = true;   // every part of the word on the family, and clear of every face
-          for (let i = 0; i <= 8 && fits; i++) { const qx = px + w * i / 8; for (const qy of [top, by - fs * 0.36, by]) if (!onFamily(qx, qy) || inFace(qx, qy)) { fits = false; break; } }
+          const k = Math.round((v * ch + ((n - 1) * step + body * CAP) / 2 - y0) / step), by = y0 + k * step, top = by - fs * CAP, px = cx - w / 2;
+          let fits = true;   // every part of it on the family, clear of every face and of the other large words
+          for (let i = 0; i <= 12 && fits; i++) { const qx = px + w * i / 12; for (const qy of [top, (top + by) / 2, by]) if (!onFamily(qx, qy) || inFace(qx, qy, 1.05)) { fits = false; break; } }
+          if (fits && big.some(q => k - n + 1 <= q.k1 && k >= q.k0 && px - sp < q.x1 && px + w + sp > q.x0)) fits = false;
           if (!fits) continue;
-          big.push([px - gap * 0.6, top - step * 0.1, px + w + gap * 0.6, by + step * 0.05]);
-          words.push({ t: w0, x: px, y: by, w, fs, big: true });
+          big.push({ t, x: px, y: by, w, fs, k0: k - n + 1, k1: k, x0: px - sp, x1: px + w + sp });
           break;
         }
+      }
+      for (let k = 0, y = y0; y < ch + step; k++, y += step) {
+        const bl = big.filter(q => k >= q.k0 && k <= q.k1).sort((p, q) => p.x0 - q.x0);
+        let a = -body * 2, ta = false;
+        for (const q of bl) { line(body, y, a, q.x0, ta, true, 'b'); a = q.x1; ta = true; }
+        line(body, y, a, cw + body * 2, ta, false, 'b');
+      }
+      big.forEach(q => words.push({ t: q.t, x: q.x, y: q.y, w: q.w, fs: q.fs, s: 1, tag: 'b', big: true }));
+      // the faces: their own finer rows, only where a face is
+      const fsF = body * 0.66, stepF = fsF * CAP + fsF * 0.14;
+      for (let y = fsF * CAP; y < ch + stepF; y += stepF) {
+        const yc = y - fsF * CAP / 2, spans = [];
+        faces.forEach(([a, b, rx, ry]) => { const e = (yc - b) / (ry * 1.15); if (Math.abs(e) < 1) { const hw = rx * 1.15 * Math.sqrt(1 - e * e); spans.push([a - hw - fsF * 2, a + hw + fsF * 2]); } });
+        spans.sort((p, q) => p[0] - q[0]);
+        const merged = []; spans.forEach(s0 => { const m = merged[merged.length - 1]; if (m && s0[0] <= m[1]) m[1] = Math.max(m[1], s0[1]); else merged.push(s0.slice()); });
+        merged.forEach(([a, b]) => line(fsF, y, a, b, false, false, 'f'));
+      }
+      // keep only words that show: on the family, and on the right side of the soft line between face and body
+      words = words.filter(w => {
+        const my = w.y - w.fs * CAP / 2, on = onFamily(w.x + w.w / 2, my) || onFamily(w.x + 2, my) || onFamily(w.x + w.w - 2, my);
+        if (!on) return false;
+        return w.tag === 'f' ? inFace(w.x + w.w / 2, my, 1.12) || inFace(w.x, my, 1.12) || inFace(w.x + w.w, my, 1.12) : w.big || !inFace(w.x + w.w / 2, my, 0.85);
       });
-      const blocked = (a, b, w, fs) => big.some(q => a < q[2] && a + w > q[0] && b - fs * 0.72 < q[3] && b > q[1]);
-      const rows = (fs, st, keep, out, onlyFamily) => {
-        out.font = font(fs);
-        for (let y = fs * 0.78; y < ch + fs; y += st) {
-          let px = -R() * fs * 4;
-          while (px < cw) {
-            const w0 = pool[(R() * pool.length) | 0], w = out.measureText(w0).width, mxp = px + w / 2, myp = y - fs * 0.36;
-            if (keep(mxp, myp) && !blocked(px, y, w, fs) && (!onlyFamily || onFamily(mxp, myp) || onFamily(px, myp) || onFamily(px + w, myp))) words.push({ t: w0, x: px, y, w, fs });
-            px += w + fs * 0.2;
-          }
-        }
-      };
-      rows(body, step, (a, b) => !inFace(a, b), tx, true);
-      rows(body * 0.66, body * 0.66 * 0.86, (a, b) => inFace(a, b), tx, true);
-      words.forEach(w => { tx.font = font(w.fs); tx.fillText(w.t, w.x, w.y); });
-      // coloured by the cut-out painting: the words keep its colours and end exactly on the family's outline
-      tx.globalCompositeOperation = 'source-in'; tx.filter = 'brightness(1.12) saturate(1.08)'; tx.drawImage(img, 0, 0, cw, ch); tx.filter = 'none';
-      tx.globalCompositeOperation = 'source-atop'; tx.globalAlpha = 0.1; tx.fillStyle = '#fff';
-      words.forEach(w => { if (w.big) tx.fillRect(w.x - 2, w.y - w.fs, w.w + 4, w.fs * 1.1); });
-      tx.globalAlpha = 1; tx.globalCompositeOperation = 'source-over';
-      layer = t;
+      // draw the two sets, each coloured by the cut-out painting, and blend them along feathered ellipses round the faces
+      const [bc, bg] = mk(), [fc, fg] = mk();
+      words.forEach(w => { const g = w.tag === 'f' ? fg : bg; g.font = font(w.fs); g.setTransform(w.s, 0, 0, 1, w.x, w.y); g.fillText(w.t, 0, 0); });
+      bg.setTransform(1, 0, 0, 1, 0, 0); fg.setTransform(1, 0, 0, 1, 0, 0);
+      const [mkc, mkg] = mk(); mkg.fillStyle = '#000'; mkg.filter = `blur(${Math.round(body * 0.45)}px)`;
+      mkg.beginPath(); faces.forEach(([a, b, rx, ry]) => { mkg.moveTo(a + rx, b); mkg.ellipse(a, b, rx, ry, 0, 0, Math.PI * 2); }); mkg.fill(); mkg.filter = 'none';
+      fg.globalCompositeOperation = 'destination-in'; fg.drawImage(mkc, 0, 0);
+      bg.globalCompositeOperation = 'destination-out'; bg.drawImage(mkc, 0, 0);
+      for (const g of [bg, fg]) { g.globalCompositeOperation = 'source-in'; g.filter = 'brightness(1.12) saturate(1.08)'; g.drawImage(img, 0, 0, cw, ch); g.filter = 'none'; }
+      // the large words a touch lighter than the painting under them, so they read first
+      bg.globalCompositeOperation = 'source-atop'; bg.globalAlpha = 0.12; bg.fillStyle = '#fff';
+      big.forEach(q => bg.fillRect(q.x - 2, q.y - q.fs * CAP - 2, q.w + 4, q.fs * CAP + 4)); bg.globalAlpha = 1;
       // the brushwork under the words, on the family only
-      under = document.createElement('canvas'); under.width = cw; under.height = ch;
-      const ux = under.getContext('2d'); ux.globalAlpha = 0.42; ux.drawImage(img, 0, 0, cw, ch);
-      // the surroundings: a faint field of smaller words in the background's muted colours, fading out at the edges
-      const [sc, sg] = mk(); const sR = R;
-      sg.font = font(body * 0.8);
-      for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.9) { let px = -sR() * body * 3; while (px < cw) { const w0 = pool[(sR() * pool.length) | 0]; sg.fillText(w0, px, y); px += sg.measureText(w0).width + body * 0.16; } }
+      const [uc, ug] = mk(); ug.globalAlpha = 0.42; ug.drawImage(img, 0, 0, cw, ch); ug.globalAlpha = 1;
+      // the surroundings: a faint field of smaller words in the background's muted colours, clear of the family
+      const [sc, sg] = mk(); sg.font = font(body * 0.8);
+      for (let y = body * 0.8; y < ch + body; y += body * 0.8 * 0.92) { let px = -R() * body * 3; while (px < cw) { const t = pick(); sg.fillText(t, px, y); px += widthOf(t, body * 0.8) + body * 0.17; } }
       sg.globalCompositeOperation = 'source-in'; sg.drawImage(bimg, 0, 0, cw, ch);
       sg.globalCompositeOperation = 'destination-out'; sg.filter = `blur(${Math.round(6 * D)}px)`; sg.drawImage(img, 0, 0, cw, ch); sg.drawImage(img, 0, 0, cw, ch); sg.filter = 'none';
-      sg.globalCompositeOperation = 'destination-in';
-      const fade = (x0, y0_, x1, y1, a, b2) => { const g = sg.createLinearGradient(x0, y0_, x1, y1); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(a, '#000'); g.addColorStop(b2, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)'); sg.fillStyle = g; sg.fillRect(0, 0, cw, ch); };
-      fade(0, 0, cw, 0, 0.18, 0.82); fade(0, 0, 0, ch, 0.3, 1);
-      sg.globalCompositeOperation = 'source-over';
-      scene = sc;
+      const fade = (g, x0, y0_, x1, y1, a, b2) => { const gr = g.createLinearGradient(x0, y0_, x1, y1); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(a, '#000'); gr.addColorStop(b2, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, cw, ch); };
+      fade(sg, 0, 0, cw, 0, 0.18, 0.82); fade(sg, 0, 0, 0, ch, 0.3, 0.7);
+      // everything fades out softly towards the bottom, rather than ending on a cut
+      for (const g of [bg, fg, ug]) fade(g, 0, 0, 0, ch, 0, 0.7);
+      for (const g of [bg, fg, ug, sg]) g.globalCompositeOperation = 'source-over';
+      layers = { b: bc, f: fc, under: uc, scene: sc };
       // each word's journey when the painting comes apart: a drift up and to the side, the large words last
       words.forEach(w => {
         const a = -Math.PI * (0.25 + R() * 0.5) + (R() - 0.5) * 0.6;
         w.dx = Math.cos(a) * (60 + R() * 220) * D; w.dy = Math.sin(a) * (60 + R() * 200) * D; w.rot = (R() - 0.5) * 0.5;
-        w.d = w.big ? 0.3 + R() * 0.15 : R() * 0.4; w.h = w.fs * 1.02;
+        w.d = w.big ? 0.3 + R() * 0.15 : R() * 0.4; w.top = w.y - w.fs * (CAP + 0.08); w.h = w.fs * (CAP + 0.16);
       });
       shown = -1;
     }
@@ -229,19 +275,19 @@
     function paint(q) {
       const cw = el.width, ch = el.height;
       x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch);
-      if (!layer) return;
-      x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(scene, 0, 0);
-      x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(under, 0, 0);
-      if (q <= 0) { x.globalAlpha = 1; x.drawImage(layer, 0, 0); return; }
+      if (!layers) return;
+      x.globalAlpha = 0.16 * (1 - smooth(0, 0.4, q)); x.drawImage(layers.scene, 0, 0);
+      x.globalAlpha = 1 - smooth(0, 0.45, q); x.drawImage(layers.under, 0, 0);
+      if (q <= 0) { x.globalAlpha = 1; x.drawImage(layers.b, 0, 0); x.drawImage(layers.f, 0, 0); return; }
       for (const w of words) {
         const p = Math.min(1, Math.max(0, (q - w.d) / 0.55)), e = easeIO(p), a = 1 - p * p;
         if (a <= 0.01) continue;
-        const sy0 = w.y - w.fs * 0.86;
+        const src = layers[w.tag];
         x.globalAlpha = a;
-        if (e === 0) { x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(layer, w.x, sy0, w.w, w.h, w.x, sy0, w.w, w.h); continue; }
-        const cxw = w.x + w.w / 2 + w.dx * e, cyw = sy0 + w.h / 2 + w.dy * e, r = w.rot * e;
+        if (e === 0) { x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(src, w.x, w.top, w.w, w.h, w.x, w.top, w.w, w.h); continue; }
+        const cxw = w.x + w.w / 2 + w.dx * e, cyw = w.top + w.h / 2 + w.dy * e, r = w.rot * e;
         x.setTransform(Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), cxw, cyw);
-        x.drawImage(layer, w.x, sy0, w.w, w.h, -w.w / 2, -w.h / 2, w.w, w.h);
+        x.drawImage(src, w.x, w.top, w.w, w.h, -w.w / 2, -w.h / 2, w.w, w.h);
       }
       x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1;
     }
