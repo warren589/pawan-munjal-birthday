@@ -181,15 +181,18 @@
     // a wider view of the painting round the figure (some facets): its own canvas behind, set in faint words over the
     // painting's brushwork and fading out radially, so the figure sits in its scene without a hard edge
     const scn = f.artScene ? document.createElement('canvas') : null, sx2 = scn && scn.getContext('2d'), simg = new Image();
-    if (scn) { scn.className = 'famscene'; scn.setAttribute('aria-hidden', 'true'); $('.stage').insertBefore(scn, el); simg.src = f.artScene.src; }
-    // artWide (desktop, some facets): the same painting extended to the right, so the scene runs on behind the text
-    const wimg = new Image(); if (f.artWide) wimg.src = f.artWide.src;
+    if (scn) { scn.className = 'famscene'; scn.setAttribute('aria-hidden', 'true'); $('.stage').insertBefore(scn, el); }
+    // artWide (desktop, some facets): the same painting extended to the right, so the scene runs on behind the text.
+    // Only the background this screen uses is downloaded; the other one only if the screen changes (a tablet turned)
+    const wimg = new Image(), wideNow = () => !!f.artWide && !MOBILE.matches;
+    const need = () => { const im = wideNow() ? wimg : simg, src = wideNow() ? f.artWide.src : f.artScene && f.artScene.src;
+      if (!src || im.src) return null; im.src = src; return im.decode().catch(() => {}); };
     let SC = f.artScene, SI = simg, wideOn = false;
     let sbox = null, sceneOn = false;
     const img = new Image(), mimg = new Image(), bimg = new Image();
     let built = '', box = null, shown = -1, words = [], layers = null, D = 1, hl = null, lastQ = 0, slots = new Map(), stamp = '';
     img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
-    const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode(), scn ? simg.decode() : null, f.artWide ? wimg.decode() : null]).catch(() => {});
+    const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode(), scn ? need() : null]).catch(() => {});
     function place() {
       const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
@@ -210,7 +213,8 @@
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
       sceneOn = !!scn;
-      wideOn = !!f.artWide && !MOBILE.matches; SC = wideOn ? f.artWide : f.artScene; SI = wideOn ? wimg : simg;
+      wideOn = wideNow(); SC = wideOn ? f.artWide : f.artScene; SI = wideOn ? wimg : simg;
+      if (scn) { const late = need(); if (late) late.then(() => { built = ''; build(); shown = -1; kick(); }); }   // switched between phone and desktop
       if (scn) {
         // the scene's place, cut to the screen (on a phone only top and bottom: it pans sideways with the painting; with
         // the extended painting on desktop it runs on to the screen's right edge, behind the text)
@@ -224,9 +228,10 @@
     }
     function buildScene(body) {
       if (!sceneOn || !SI.naturalWidth) return;
-      const W2 = Math.round(sbox.w * D), H2 = Math.round(sbox.h * D), a = SC;
+      const SD = Math.min(D, 1.25);   // the paintings hold no more detail than this: a retina-sized copy only costs memory
+      const W2 = Math.round(sbox.w * SD), H2 = Math.round(sbox.h * SD), a = SC;
       scn.width = W2; scn.height = H2;
-      const g = sx2, ox = (box.left - sbox.left) * D, oy = (box.top - sbox.top) * D, bw = box.w * D, bh = box.h * D;
+      const g = sx2, ox = (box.left - sbox.left) * SD, oy = (box.top - sbox.top) * SD, bw = box.w * SD, bh = box.h * SD;
       const ix = ox + a.x * bw, iy = oy + a.y * bh, iw = a.w * bw, ih = a.h * bh;
       // words, coloured by the painting (unless the painting itself is shown)
       const wc = document.createElement('canvas'); wc.width = W2; wc.height = H2; const wg = wc.getContext('2d');
@@ -249,13 +254,13 @@
         const R = Math.round(bh * (hl2.reach || 0.07)), hm = document.createElement('canvas'); hm.width = W2; hm.height = H2;
         const hx = hm.getContext('2d'); hx.filter = `blur(${R}px)`; for (let k = 0; k < 3; k++) hx.drawImage(img, ox, oy, bw, bh); hx.filter = 'none';
         const soft = document.createElement('canvas'); soft.width = W2; soft.height = H2; const sx3 = soft.getContext('2d');
-        sx3.filter = `blur(${Math.round((hl2.blur || 0) * D)}px) saturate(${1 - (hl2.desat || 0)}) brightness(${0.88 * (1 - (hl2.dark || 0))})`;
+        sx3.filter = `blur(${Math.round((hl2.blur || 0) * SD)}px) saturate(${1 - (hl2.desat || 0)}) brightness(${0.88 * (1 - (hl2.dark || 0))})`;
         sx3.drawImage(SI, ix, iy, iw, ih); sx3.filter = 'none';
         sx3.globalCompositeOperation = 'destination-in'; sx3.drawImage(hm, 0, 0);
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.84; g.drawImage(soft, 0, 0); g.globalAlpha = 1;
       }
       // a clear margin round the figure
-      g.globalCompositeOperation = 'destination-out'; g.filter = `blur(${Math.round(7 * D)}px)`; g.drawImage(img, ox, oy, bw, bh); g.drawImage(img, ox, oy, bw, bh); g.filter = 'none';
+      g.globalCompositeOperation = 'destination-out'; g.filter = `blur(${Math.round(7 * SD)}px)`; g.drawImage(img, ox, oy, bw, bh); g.drawImage(img, ox, oy, bw, bh); g.filter = 'none';
       // a soft oval round him, and out at the bottom with the figure
       g.globalCompositeOperation = 'destination-in';
       // the painting's own edges fade too, wherever they fall inside the view
@@ -265,7 +270,7 @@
       if (ix + iw < W2 + ex) edge(ix + iw, 0, ix + iw - ex, 0);
       if (iy > -ey) edge(0, iy, 0, iy + ey);
       // and the oval stays clear of the screen's edge
-      const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * D;
+      const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * SD;
       // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
       // oval: [how much larger, how far out it stays solid] — larger and flatter reads less as a spotlight
       if (SC.natural) {
@@ -276,7 +281,7 @@
           // the extended painting: the same fades, measured on the screen, for every facet: off the left edge, softly into the
           // top and the bottom, and out at the right edge behind the text. Where a painting stops short of an edge it fades
           // over the same distance from its own edge instead
-          const vwD = innerWidth * D, vhD = innerHeight * D, Bb = Math.min(iy + ih, H2);
+          const vwD = innerWidth * SD, vhD = innerHeight * SD, Bb = Math.min(iy + ih, H2);
           if (ix > 0) edge(L, 0, L + vwD * 0.05, 0);
           edge(Rr, 0, Rr - vwD * 0.08, 0); edge(0, T, 0, T + vhD * 0.14); edge(0, Bb, 0, Bb - vhD * 0.17);
         } else {
@@ -298,7 +303,7 @@
       }
       if (wideOn) {
         // behind the text the painting settles back a little, so the type stays easy to read on it
-        const tx0 = (innerWidth * 0.5 - sbox.left) * D, tx1 = (innerWidth * 0.63 - sbox.left) * D;
+        const tx0 = (innerWidth * 0.5 - sbox.left) * SD, tx1 = (innerWidth * 0.63 - sbox.left) * SD;
         const vg = g.createLinearGradient(tx0, 0, tx1, 0); vg.addColorStop(0, 'rgba(12,10,10,0)'); vg.addColorStop(1, 'rgba(12,10,10,0.5)');
         g.globalCompositeOperation = 'source-atop'; g.fillStyle = vg; g.fillRect(0, 0, W2, H2);
       }
@@ -624,7 +629,7 @@
   const travel = document.createElement('canvas'), tctx = travel.getContext('2d');
   travel.className = 'travel'; travel.setAttribute('aria-hidden', 'true'); $('.stage').appendChild(travel);
   let travelOn = false;
-  function sizeTravel() { travel.width = Math.round(innerWidth * dpr); travel.height = Math.round(innerHeight * dpr); travel.style.width = innerWidth + 'px'; travel.style.height = innerHeight + 'px'; }
+  function sizeTravel() { const td = Math.min(dpr, 1.5); travel.width = Math.round(innerWidth * td); travel.height = Math.round(innerHeight * td); travel.style.width = innerWidth + 'px'; travel.style.height = innerHeight + 'px'; }
   function travellersOf(s) {
     if (isArt(s)) return ARTS[s].travellers();
     const L = layoutFor(s);
@@ -634,7 +639,7 @@
   function originOf(s) { const r = (isArt(s) ? ARTS[s].el : cv).getBoundingClientRect(), st = travel.getBoundingClientRect(); return [r.left - st.left, r.top - st.top]; }
   const travelPairs = new Map();
   function pairsFor(a, b) {
-    const key = `${a}>${b}|${innerWidth}x${innerHeight}|${W}x${H}`;
+    const key = `${a}>${b}|${innerWidth}|${W}x${H}`;   // (not the height: a phone's address bar must not undo the work)
     if (travelPairs.has(key)) return travelPairs.get(key);
     const A = travellersOf(a), B = travellersOf(b); if (!A.length || !B.length) return null;
     const [ax, ay] = originOf(a), [bx, by] = originOf(b), vh = innerHeight, R = seeded(A.length * 31 + B.length * 7);
@@ -647,13 +652,13 @@
       P[k] = { a: oa[ia], b: ob[ib], aMain: ia !== pa, bMain: ib !== pb, d: Math.min(1, Math.max(0, ((by + ob[ib].cy) / vh) * 0.55 + R() * 0.45)), arc: (R() - 0.5) * vh * 0.12 };
       pa = ia; pb = ib;
     }
-    travelPairs.set(key, P); if (travelPairs.size > 8) travelPairs.delete(travelPairs.keys().next().value);
+    travelPairs.set(key, P); if (travelPairs.size > 12) travelPairs.delete(travelPairs.keys().next().value);
     return P;
   }
   function drawTravel(a, b, e, mul) {
     const P = pairsFor(a, b); if (!P) return;
     const [ax, ay] = originOf(a), [bx, by] = originOf(b), span = 0.55;
-    tctx.setTransform(dpr, 0, 0, dpr, 0, 0); tctx.clearRect(0, 0, innerWidth, innerHeight); travelOn = true;
+    const td = travel.width / innerWidth; tctx.setTransform(td, 0, 0, td, 0, 0); tctx.clearRect(0, 0, innerWidth, innerHeight); travelOn = true;
     const put = (t, cx, cy, al) => { tctx.globalAlpha = al * mul; tctx.drawImage(t.c, t.sx, t.sy, t.sw, t.sh, cx + t.ox, cy + t.oy, t.w, t.h); };
     for (const p of P) {
       let t = (e - p.d * (1 - span)) / span; t = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -757,7 +762,8 @@
     const now = performance.now();
     find += (findTarget - find) * 0.15; if (Math.abs(findTarget - find) < 0.003) find = findTarget;
     const b = blend(); view = { ...b, state: b.e < 0.5 ? b.a : b.b };
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const usesCv = !(isArt(b.a) && isArt(b.b)); if (usesCv || cvDirty) { ctx.clearRect(0, 0, W, H); cvDirty = usesCv; }   // every facet is a painting now: leave the empty canvas alone
     let anim = find !== findTarget;
     if (isArt(b.a) || isArt(b.b)) {
       // to and from a painting: every word travels into the next facet's picture and becomes one of its words
@@ -809,6 +815,7 @@
     placeAnnot(b.a === b.b ? 1 : Math.max(0, 1 - Math.min(b.e, 1 - b.e) * 5));
     if (anim) kick();
   }
+  let cvDirty = true;
   const kick = () => { if (!raf) raf = requestAnimationFrame(frameDraw); };
   addEventListener('scroll', kick, { passive: true });
 
@@ -880,7 +887,13 @@
   }
   // after the loading screen: the rest of the portraits, in story order, a few milliseconds per frame
   function warm() { warmGen++; run(jobsFor(STATES), 7); }
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); sizeTravel(); travelPairs.clear(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
+  // phones: the address bar sliding in and out as you scroll changes only the height a little; that is not a new
+  // layout, so the paintings are not rebuilt for it (rebuilding them all froze the page mid-scroll)
+  let rt, lastVW = innerWidth, lastVH = innerHeight;
+  addEventListener('resize', () => {
+    if (MOBILE.matches && innerWidth === lastVW && Math.abs(innerHeight - lastVH) < 200) { sizeTravel(); kick(); return; }
+    lastVW = innerWidth; lastVH = innerHeight;
+    clearTimeout(rt); rt = setTimeout(() => { const ow = W, oh = H; geometry(); sizeTravel(); travelPairs.clear(); ART_LIST.forEach(A => { A.place(); A.build(); }); if (W !== ow || H !== oh) warm(); kick(); }, 150); });
 
   // ---------------- hover loupe + tap to read ----------------
   // The word under the pointer, in a label just above it (below it near the top of the screen), never cut off at the edges.
@@ -1409,6 +1422,12 @@
     const all = run(jobsFor(order), 150, (j, n) => { bar.style.transform = `scaleX(${j / n})`; });
     await Promise.race([all, new Promise(r => setTimeout(r, 9000))]);
     ready = true; kick();
+    // the word journeys between neighbouring facets, worked out ahead in idle moments rather than on the first scroll
+    const idle = window.requestIdleCallback || (f => setTimeout(f, 60));
+    // each journey also rehearsed once, unseen (drawn and cleared within the same moment), so the browser has its
+    // pictures ready and the code warm before the first real scroll
+    STATES.slice(1).forEach((s, i) => idle(() => { const a = STATES[i]; if (!isArt(a) || !isArt(s) || travelOn) return;
+      pairsFor(a, s); for (const e of [0.3, 0.6]) drawTravel(a, s, e, 1); clearTravel(); }));
     await new Promise(r => setTimeout(r, 250));
     body.classList.add('ready'); body.classList.remove('booting'); kick();
   })();
