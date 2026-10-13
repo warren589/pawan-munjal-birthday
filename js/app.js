@@ -774,15 +774,21 @@
   const notes = $$('.flow .sec').map(sec => ({ s: sec.dataset.state, el: sec.querySelector('.note'), o: -1, y: 0 }));
   function placeNotes(b) {
     const D = MOBILE.matches ? 18 : 26;
+    // one letter, page by page: moving on, the page lifts away (up, turning a little) and the next page is already
+    // underneath; scrolling back lays it down again. The closing note scrolls with the page, so it keeps the fade.
+    const turn = b.a !== b.b && b.a !== 'final' && b.b !== 'final', L = innerHeight * (MOBILE.matches ? 0.6 : 0.85);
     for (const n of notes) {
-      let o = 0, y = 0;
+      let o = 0, y = 0, r = 0, up = false;
       if (n.s === b.a && b.a === b.b) o = 1;
+      else if (n.s === b.a && turn) { const k = smooth(0.04, 0.8, b.e); y = -L * k * k; r = 7 * k; o = 1 - smooth(0.5, 0.86, b.e); up = b.e > 0.01; }
+      else if (n.s === b.b && turn) o = smooth(0.02, 0.28, b.e);
       else if (n.s === b.a) { o = 1 - smooth(0.04, 0.42, b.e); y = -D * smooth(0, 0.5, b.e); }
       else if (n.s === b.b) { o = smooth(0.58, 0.96, b.e); y = D * (1 - smooth(0.5, 1, b.e)); }
-      o = Math.round(o * 100) / 100; y = Math.round(y * 2) / 2;
-      if (o === n.o && y === n.y) continue;
-      n.o = o; n.y = y;
-      n.el.style.setProperty('--no', o); n.el.style.setProperty('--ny', y + 'px');
+      o = Math.round(o * 100) / 100; y = Math.round(y * 2) / 2; r = Math.round(r * 20) / 20;
+      if (o === n.o && y === n.y && r === n.r) continue;
+      n.o = o; n.y = y; n.r = r;
+      n.el.style.setProperty('--no', o); n.el.style.setProperty('--ny', y + 'px'); n.el.style.setProperty('--nr', r + 'deg');
+      n.el.classList.toggle('lifting', up);   // above the page beneath, and without its own stack of pages
       n.el.classList.toggle('vis', o > 0.02); n.el.classList.toggle('live', o > 0.6);
     }
   }
@@ -955,7 +961,8 @@
   $$('.js-write').forEach(b => b.addEventListener('click', openComposer));
   // while the message box is open the page stays where it is: no scrolling back up to the splash or on to the messages
   // (the message itself still scrolls when it is long)
-  const scrollsInside = (t, dy) => { const a = t.closest && t.closest('textarea'); return a && a.scrollHeight > a.clientHeight + 1 && (dy < 0 ? a.scrollTop > 0 : a.scrollTop + a.clientHeight < a.scrollHeight - 1); };
+  const canScroll = (a, dy) => a && a.scrollHeight > a.clientHeight + 1 && (dy < 0 ? a.scrollTop > 0 : a.scrollTop + a.clientHeight < a.scrollHeight - 1);
+  const scrollsInside = (t, dy) => t.closest && (canScroll(t.closest('textarea'), dy) || canScroll(t.closest('.composer'), dy));   // the message, or the sheet itself on a phone
   addEventListener('wheel', e => { if (body.classList.contains('composing') && !scrollsInside(e.target, e.deltaY)) e.preventDefault(); }, { passive: false });
   let touchY = 0;
   addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
