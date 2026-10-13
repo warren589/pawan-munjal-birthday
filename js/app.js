@@ -84,21 +84,64 @@
         <div class="note fnote">
           <p class="eyebrow"><b>${String(i + 1).padStart(2, '0')}</b> / 07 <span>${f.name}</span></p>
           <h2 class="fline">${f.line}</h2>
-          <button class="link js-story" type="button" aria-expanded="false">Read his story</button>
-          <div class="story" hidden>${f.story.map(p => `<p>${p}</p>`).join('')}</div>
+          <div class="story" id="story-${i}">${f.story.map(p => `<p>${p}</p>`).join('')}</div>
+          <button class="link js-story" type="button" aria-expanded="false" aria-controls="story-${i}">Read his story</button>
           ${f.img ? '' : '<p class="pending-photo">Placeholder silhouette · photograph to come</p>'}
         </div>
       </section>`);
     rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="${i}" aria-label="${f.name}" style="--ink:${tint(f.ink[0])}"><span>${f.short}</span><b>${String(i + 1).padStart(2, '0')}</b></button>`);
   });
   rail.insertAdjacentHTML('beforeend', `<button type="button" data-go="final" aria-label="The whole person" style="--ink:#f2ece2"><span>One life</span><b>∗</b></button>`);
+  // the story under each facet's headline. Desktop: as much of it as fits on the page, cut at a whole line, and
+  // "Read more" only when something is left over (the page then grows to hold it all). Phones: behind "Read his story".
+  const stories = () => $$('.fnote').map(n => ({ n, st: n.querySelector('.story'), b: n.querySelector('.js-story') }));
+  function setStory(x, open) {
+    const mob = MOBILE.matches;
+    x.n.classList.toggle('expanded', open); x.b.setAttribute('aria-expanded', open);
+    if (mob) { x.st.hidden = !open; requestAnimationFrame(() => x.st.classList.toggle('open', open)); x.b.textContent = open ? 'Close' : 'Read his story'; }
+    else { x.st.classList.toggle('open', open); x.b.textContent = open ? 'Show less' : 'Read more'; fitStory(x); }
+  }
+  function fitStory(x) {
+    const { n, st, b } = x;
+    if (MOBILE.matches || n.classList.contains('expanded')) { st.style.maxHeight = ''; n.classList.remove('clamped'); if (!MOBILE.matches) b.hidden = !n.classList.contains('expanded'); return; }
+    st.hidden = false; st.style.maxHeight = 'none'; b.hidden = false;
+    const cs = getComputedStyle(n), room = n.clientHeight - parseFloat(cs.paddingBottom) - st.offsetTop - b.offsetHeight - 14;
+    let cut = 0, cutLine = false;
+    for (const p of st.children) {
+      const top = p.offsetTop - st.offsetTop, h = p.offsetHeight;
+      if (top + h <= room) { cut = top + h; continue; }
+      const lh = parseFloat(getComputedStyle(p).lineHeight) || 26, lines = Math.floor((room - top) / lh);
+      if (lines > 0) { cut = top + lines * lh; cutLine = true; }
+      break;
+    }
+    const full = st.scrollHeight, clipped = full > cut + 2;
+    st.style.maxHeight = clipped ? Math.max(0, cut) + 'px' : '';
+    n.classList.toggle('clamped', clipped && cutLine);   // the last line fades out when it is cut mid-paragraph
+    b.hidden = !clipped;
+  }
+  // phones: when a note runs past the bottom of the screen, the letter slides up over the foot of the portrait
+  function fitNotes() {
+    const mob = MOBILE.matches;
+    for (const n of $$('.flow .sec:not(.final) .note')) {
+      n.style.setProperty('--fit', '0px'); if (!mob) continue;
+      const top = parseFloat(getComputedStyle(n).top) || 0, over = top + n.offsetHeight - (innerHeight - 14);
+      n.style.setProperty('--fit', Math.max(0, Math.min(over, (parseFloat(getComputedStyle(root).getPropertyValue('--stageH')) || 300) * 0.62)) + 'px');
+    }
+  }
+  const root = document.documentElement;
+  function fitAll() { stories().forEach(fitStory); fitNotes(); }
   chapters.addEventListener('click', e => {
     const b = e.target.closest('.js-story'); if (!b) return;
-    const st = b.nextElementSibling, open = st.hidden;
-    st.hidden = !open; b.setAttribute('aria-expanded', open); b.textContent = open ? 'Close' : 'Read his story';
-    requestAnimationFrame(() => st.classList.toggle('open', open));
+    const x = stories().find(x => x.b === b); setStory(x, b.getAttribute('aria-expanded') !== 'true'); fitNotes();
     placeAnnot();
   });
+  setTimeout(() => {   // (after the rest of this file has run: MOBILE is set further down)
+    stories().forEach(x => { if (MOBILE.matches) x.st.hidden = true; else x.b.textContent = 'Read more'; });
+    addEventListener('resize', () => requestAnimationFrame(fitAll));
+    MOBILE.addEventListener('change', () => { stories().forEach(x => setStory(x, false)); fitAll(); });
+    (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(fitAll));
+    addEventListener('load', () => requestAnimationFrame(fitAll));
+  }, 0);
   const goTo = id => { const el = id === 'final' ? $('#final') : id === 'hero' ? $('.hero') : $('#facet-' + id); el && el.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) goTo(g.dataset.go); });
 
@@ -115,6 +158,7 @@
     dpr = Math.min(2, devicePixelRatio || 1);
     frame.style.width = W + 'px'; frame.style.height = H + 'px';
     document.documentElement.style.setProperty('--stageH', H + 'px');   // phones set the text just below the portrait
+    requestAnimationFrame(() => fitAll());   // the letters fit to the new layout
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
   }
   const layoutFor = s => wp.layout(spec(s), W, H, dpr);
@@ -776,7 +820,7 @@
     const D = MOBILE.matches ? 18 : 26;
     // one letter, page by page: moving on, the page lifts away (up, turning a little) and the next page is already
     // underneath; scrolling back lays it down again. The closing note scrolls with the page, so it keeps the fade.
-    const turn = b.a !== b.b && b.a !== 'final' && b.b !== 'final', L = innerHeight * (MOBILE.matches ? 0.6 : 0.85);
+    const turn = b.a !== b.b && b.a !== 'final' && b.b !== 'final' && !REDUCED.matches, L = innerHeight * (MOBILE.matches ? 0.6 : 0.85);
     for (const n of notes) {
       let o = 0, y = 0, r = 0, up = false;
       if (n.s === b.a && b.a === b.b) o = 1;
@@ -799,7 +843,7 @@
     rail.style.setProperty('--p', Math.max(0, ai) / 7);
     body.dataset.state = s;
     $$('.flow .sec').forEach(sec => sec.classList.toggle('is-on', sec.dataset.state === s));
-    $$('.story:not([hidden])').forEach(st => { if (st.closest('.sec').dataset.state !== s) { st.hidden = true; st.classList.remove('open'); const b = st.previousElementSibling; b.textContent = 'Read his story'; b.setAttribute('aria-expanded', 'false'); } });
+    stories().forEach(x => { if (x.n.classList.contains('expanded') && x.n.closest('.sec').dataset.state !== s) { setStory(x, false); fitNotes(); } });
   }
 
   // warm every portrait in idle time so scrolling never waits on layout
