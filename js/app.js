@@ -157,6 +157,11 @@
         const zl = vw * 0.025, zr = vw * (state === 'hero' || state === 'final' ? 0.585 : 0.63);   // the opening note sits a little further left
         w = Math.min(zr - zl, (vh - hdr - 60) * (f.artScale || 1) * ar); h = w / ar;   // artScale: a figure standing smaller in its scene
         left = zl + (zr - zl - w) / 2; top = Math.max(hdr + 12, vh / 2 - h * 0.44);
+        // with the extended painting the figure moves left as far as it needs (never past the margin) for the painting to
+        // reach the screen's left edge, and the right one too where the painting is wide enough: every facet's background
+        // then runs off the same edges
+        const aw = f.artWide;
+        if (aw) { const lo = vw - (aw.x + aw.w) * w, hi = -aw.x * w; left = Math.max(zl, lo <= hi ? Math.min(Math.max(left, lo), hi) : Math.min(left, hi)); }
       }
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
@@ -223,13 +228,19 @@
         // natural: the painting simply softens away on every side over a wide margin, the corners a little more, with no
         // centre to it, the way a painted scene fades into a dark wall
         const L = Math.max(ix, 0), Rr = Math.min(ix + iw, W2), T = Math.max(iy, 0), fw = (Rr - L) * 0.24, fh = (oy + bh - T) * 0.26;
-        if (wideOn) {   // the extended painting: soft at its own edges and the screen's right edge only, never cut off by the text
-          if (ix > 0) edge(L, 0, L + fw * 0.6, 0);
-          edge(Rr, 0, Rr - (Rr - L) * 0.08, 0); edge(0, T, 0, T + fh * 0.7);
-        } else { edge(L, 0, L + fw, 0); edge(Rr, 0, Rr - (Rr - L) * 0.4, 0); edge(0, T, 0, T + fh); }   // the side towards the text fades out furthest
-        const mx = (L + Rr) / 2, my = (T + oy + bh) / 2, rr = Math.hypot(Rr - L, oy + bh - T) * 0.62;
-        const cg = g.createRadialGradient(mx, my, 0, mx, my, rr); cg.addColorStop(0, '#000'); cg.addColorStop(0.72, '#000'); cg.addColorStop(1, 'rgba(0,0,0,0.25)');
-        g.fillStyle = cg; g.fillRect(0, 0, W2, H2);
+        if (wideOn) {
+          // the extended painting: the same fades, measured on the screen, for every facet: off the left edge, softly into the
+          // top and the bottom, and out at the right edge behind the text. Where a painting stops short of an edge it fades
+          // over the same distance from its own edge instead
+          const vwD = innerWidth * D, vhD = innerHeight * D, Bb = Math.min(iy + ih, H2);
+          if (ix > 0) edge(L, 0, L + vwD * 0.05, 0);
+          edge(Rr, 0, Rr - vwD * 0.08, 0); edge(0, T, 0, T + vhD * 0.14); edge(0, Bb, 0, Bb - vhD * 0.17);
+        } else {
+          edge(L, 0, L + fw, 0); edge(Rr, 0, Rr - (Rr - L) * 0.4, 0); edge(0, T, 0, T + fh);   // the side towards the text fades out furthest
+          const mx = (L + Rr) / 2, my = (T + oy + bh) / 2, rr = Math.hypot(Rr - L, oy + bh - T) * 0.62;
+          const cg = g.createRadialGradient(mx, my, 0, mx, my, rr); cg.addColorStop(0, '#000'); cg.addColorStop(0.72, '#000'); cg.addColorStop(1, 'rgba(0,0,0,0.25)');
+          g.fillStyle = cg; g.fillRect(0, 0, W2, H2);
+        }
       } else {
         const [grow, solidTo] = SC.oval || [1, 0.5];
         const rx = Math.min((bw * 0.44 + bh * 0.4) * grow, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min((bh * 0.56 + bw * 0.12) * grow, Math.min(cy - iy, iy + ih - cy) * 1.08);
@@ -237,8 +248,10 @@
         const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(solidTo, solidTo > 0.5 ? '#000' : 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = rg; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.restore();
       }
-      const fy0 = oy + bh * (f.artFade || 0.86) - bh * 0.1, lg = g.createLinearGradient(0, fy0, 0, oy + bh); lg.addColorStop(0, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = lg; g.fillRect(0, 0, W2, H2);   // whole canvas: the gradient holds solid above the fade and clear below it
+      if (!wideOn) {   // (the extended painting has its own bottom fade, on the screen, above)
+        const fy0 = oy + bh * (f.artFade || 0.86) - bh * 0.1, lg = g.createLinearGradient(0, fy0, 0, oy + bh); lg.addColorStop(0, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = lg; g.fillRect(0, 0, W2, H2);   // whole canvas: the gradient holds solid above the fade and clear below it
+      }
       if (wideOn) {
         // behind the text the painting settles back a little, so the type stays easy to read on it
         const tx0 = (innerWidth * 0.5 - sbox.left) * D, tx1 = (innerWidth * 0.63 - sbox.left) * D;
