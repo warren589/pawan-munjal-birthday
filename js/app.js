@@ -103,9 +103,12 @@
   }
   function fitStory(x) {
     const { n, st, b } = x;
-    if (MOBILE.matches || n.classList.contains('expanded')) { st.style.maxHeight = ''; n.classList.remove('clamped'); if (!MOBILE.matches) b.hidden = !n.classList.contains('expanded'); return; }
+    if (MOBILE.matches) { st.style.maxHeight = ''; n.classList.remove('clamped'); return; }
     st.hidden = false; st.style.maxHeight = 'none'; b.hidden = false;
     const cs = getComputedStyle(n), room = n.clientHeight - parseFloat(cs.paddingBottom) - st.offsetTop - b.offsetHeight - 14;
+    if (n.classList.contains('expanded')) {   // opened: the whole story, scrolling within the page if it is taller than the screen allows
+      n.classList.remove('clamped'); st.style.maxHeight = st.scrollHeight > room + 2 ? Math.max(80, room) + 'px' : ''; return;
+    }
     let cut = 0, cutLine = false;
     for (const p of st.children) {
       const top = p.offsetTop - st.offsetTop, h = p.offsetHeight;
