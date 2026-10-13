@@ -138,11 +138,14 @@
     // painting's brushwork and fading out radially, so the figure sits in its scene without a hard edge
     const scn = f.artScene ? document.createElement('canvas') : null, sx2 = scn && scn.getContext('2d'), simg = new Image();
     if (scn) { scn.className = 'famscene'; scn.setAttribute('aria-hidden', 'true'); $('.stage').insertBefore(scn, el); simg.src = f.artScene.src; }
+    // artWide (desktop, some facets): the same painting extended to the right, so the scene runs on behind the text
+    const wimg = new Image(); if (f.artWide) wimg.src = f.artWide.src;
+    let SC = f.artScene, SI = simg, wideOn = false;
     let sbox = null, sceneOn = false;
     const img = new Image(), mimg = new Image(), bimg = new Image();
     let built = '', box = null, shown = -1, words = [], layers = null, D = 1, hl = null, lastQ = 0, slots = new Map(), stamp = '';
     img.src = f.art; mimg.src = f.artMask; bimg.src = f.artBg;
-    const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode(), scn ? simg.decode() : null]).catch(() => {});
+    const loaded = Promise.all([img.decode(), mimg.decode(), bimg.decode(), scn ? simg.decode() : null, f.artWide ? wimg.decode() : null]).catch(() => {});
     function place() {
       const vw = innerWidth, vh = innerHeight, ar = (img.naturalWidth / img.naturalHeight) || 1;
       const hdr = parseFloat(getComputedStyle(root).getPropertyValue('--hdr'));
@@ -158,20 +161,21 @@
       box = { w: Math.round(w), h: Math.round(h), top, left };
       Object.assign(el.style, { width: box.w + 'px', height: box.h + 'px', top: top + 'px', left: left + 'px' });
       sceneOn = !!scn;
+      wideOn = !!f.artWide && !MOBILE.matches; SC = wideOn ? f.artWide : f.artScene; SI = wideOn ? wimg : simg;
       if (scn) {
-        // the scene's place, cut to the screen
-        // the scene's place, cut to the screen (on a phone only top and bottom: it pans sideways with the painting)
-        const a = f.artScene, mob = MOBILE.matches, l0 = left + a.x * box.w, r0 = left + (a.x + a.w) * box.w;
+        // the scene's place, cut to the screen (on a phone only top and bottom: it pans sideways with the painting; with
+        // the extended painting on desktop it runs on to the screen's right edge, behind the text)
+        const a = SC, mob = MOBILE.matches, l0 = left + a.x * box.w, r0 = left + (a.x + a.w) * box.w;
         const l = mob ? Math.max(l0, left - vw * 0.5) : Math.max(0, l0), t = Math.max(mob ? hdr : 0, top + a.y * box.h);
-        const r = mob ? Math.min(r0, left + box.w + vw * 0.5) : Math.min(vw * (state === 'hero' || state === 'final' ? 0.56 : 0.61), r0), b = Math.min(vh, top + (a.y + a.h) * box.h);   // desktop: ends well short of the text
+        const r = mob ? Math.min(r0, left + box.w + vw * 0.5) : Math.min(wideOn ? vw : vw * (state === 'hero' || state === 'final' ? 0.56 : 0.61), r0), b = Math.min(vh, top + (a.y + a.h) * box.h);   // desktop: ends well short of the text
         sbox = { left: l, top: t, w: Math.max(1, Math.round(r - l)), h: Math.max(1, Math.round(b - t)) };
         Object.assign(scn.style, { left: l + 'px', top: t + 'px', width: sbox.w + 'px', height: sbox.h + 'px', display: sceneOn ? '' : 'none' });
       }
       shown = -1;
     }
     function buildScene(body) {
-      if (!sceneOn || !simg.naturalWidth) return;
-      const W2 = Math.round(sbox.w * D), H2 = Math.round(sbox.h * D), a = f.artScene;
+      if (!sceneOn || !SI.naturalWidth) return;
+      const W2 = Math.round(sbox.w * D), H2 = Math.round(sbox.h * D), a = SC;
       scn.width = W2; scn.height = H2;
       const g = sx2, ox = (box.left - sbox.left) * D, oy = (box.top - sbox.top) * D, bw = box.w * D, bh = box.h * D;
       const ix = ox + a.x * bw, iy = oy + a.y * bh, iw = a.w * bw, ih = a.h * bh;
@@ -180,24 +184,24 @@
       const fs = body * 0.85, R = seeded(fi * 17 + 3), pool = [...new Set(spec(state).words.map(w => w.t.toUpperCase()))];
       wg.font = `700 ${fs}px ${window.WP_FONT}`; wg.fillStyle = '#fff'; wg.textBaseline = 'alphabetic';
       for (let y = fs * 0.75; y < H2 + fs; y += fs * 0.84) { let px = -R() * fs * 4; while (px < W2) { const t = pool[(R() * pool.length) | 0]; wg.fillText(t, px, y); px += wg.measureText(t).width + fs * 0.16; } }
-      wg.globalCompositeOperation = 'source-in'; wg.filter = 'brightness(1.05) saturate(0.95)'; wg.drawImage(simg, ix, iy, iw, ih); wg.filter = 'none';
+      wg.globalCompositeOperation = 'source-in'; wg.filter = 'brightness(1.05) saturate(0.95)'; wg.drawImage(SI, ix, iy, iw, ih); wg.filter = 'none';
       // the brushwork underneath, darker, then the words over it
       g.clearRect(0, 0, W2, H2);
-      if (f.artScene.paint) {
+      if (SC.paint) {
         // the painting itself round him, its brushwork as painted, a step darker than the figure so he stays in front
-        g.globalAlpha = Math.min(1, 0.84 * (f.artScene.dim || 1) * (f.artScene.bright || 1)); g.filter = `brightness(${0.88 * (f.artScene.dim ? 0.82 : 1) * (f.artScene.bright || 1)}) saturate(${f.artScene.sat || 1})`; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
+        g.globalAlpha = Math.min(1, 0.84 * (SC.dim || 1) * (SC.bright || 1)); g.filter = `brightness(${0.88 * (SC.dim ? 0.82 : 1) * (SC.bright || 1)}) saturate(${SC.sat || 1})`; g.drawImage(SI, ix, iy, iw, ih); g.filter = 'none'; g.globalAlpha = 1;
       } else {
-        g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(simg, ix, iy, iw, ih); g.filter = 'none';
+        g.globalAlpha = 0.38; g.filter = 'brightness(0.8) saturate(0.92)'; g.drawImage(SI, ix, iy, iw, ih); g.filter = 'none';
         g.globalAlpha = 0.68; g.drawImage(wc, 0, 0); g.globalAlpha = 1;
       }
       // artHalo: the painting settles back right round him (softer, quieter, a shade darker), so he stands in front of it
-      const hl2 = f.artScene.halo;
+      const hl2 = SC.halo;
       if (hl2) {
         const R = Math.round(bh * (hl2.reach || 0.07)), hm = document.createElement('canvas'); hm.width = W2; hm.height = H2;
         const hx = hm.getContext('2d'); hx.filter = `blur(${R}px)`; for (let k = 0; k < 3; k++) hx.drawImage(img, ox, oy, bw, bh); hx.filter = 'none';
         const soft = document.createElement('canvas'); soft.width = W2; soft.height = H2; const sx3 = soft.getContext('2d');
         sx3.filter = `blur(${Math.round((hl2.blur || 0) * D)}px) saturate(${1 - (hl2.desat || 0)}) brightness(${0.88 * (1 - (hl2.dark || 0))})`;
-        sx3.drawImage(simg, ix, iy, iw, ih); sx3.filter = 'none';
+        sx3.drawImage(SI, ix, iy, iw, ih); sx3.filter = 'none';
         sx3.globalCompositeOperation = 'destination-in'; sx3.drawImage(hm, 0, 0);
         g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.84; g.drawImage(soft, 0, 0); g.globalAlpha = 1;
       }
@@ -215,16 +219,19 @@
       const cx = ox + bw / 2, cy = oy + bh * 0.45, sxl = MOBILE.matches ? 1e9 : (box.left + box.w / 2) * D;
       // the oval fits inside the painting (and the screen), so it is the oval that is seen, never a rectangle
       // oval: [how much larger, how far out it stays solid] — larger and flatter reads less as a spotlight
-      if (f.artScene.natural) {
+      if (SC.natural) {
         // natural: the painting simply softens away on every side over a wide margin, the corners a little more, with no
         // centre to it, the way a painted scene fades into a dark wall
         const L = Math.max(ix, 0), Rr = Math.min(ix + iw, W2), T = Math.max(iy, 0), fw = (Rr - L) * 0.24, fh = (oy + bh - T) * 0.26;
-        edge(L, 0, L + fw, 0); edge(Rr, 0, Rr - (Rr - L) * 0.4, 0); edge(0, T, 0, T + fh);   // the side towards the text fades out furthest
+        if (wideOn) {   // the extended painting: soft at its own edges and the screen's right edge only, never cut off by the text
+          if (ix > 0) edge(L, 0, L + fw * 0.6, 0);
+          edge(Rr, 0, Rr - (Rr - L) * 0.08, 0); edge(0, T, 0, T + fh * 0.7);
+        } else { edge(L, 0, L + fw, 0); edge(Rr, 0, Rr - (Rr - L) * 0.4, 0); edge(0, T, 0, T + fh); }   // the side towards the text fades out furthest
         const mx = (L + Rr) / 2, my = (T + oy + bh) / 2, rr = Math.hypot(Rr - L, oy + bh - T) * 0.62;
         const cg = g.createRadialGradient(mx, my, 0, mx, my, rr); cg.addColorStop(0, '#000'); cg.addColorStop(0.72, '#000'); cg.addColorStop(1, 'rgba(0,0,0,0.25)');
         g.fillStyle = cg; g.fillRect(0, 0, W2, H2);
       } else {
-        const [grow, solidTo] = f.artScene.oval || [1, 0.5];
+        const [grow, solidTo] = SC.oval || [1, 0.5];
         const rx = Math.min((bw * 0.44 + bh * 0.4) * grow, sxl * 0.98, Math.min(cx - ix, ix + iw - cx) * 1.02), ry = Math.min((bh * 0.56 + bw * 0.12) * grow, Math.min(cy - iy, iy + ih - cy) * 1.08);
         g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
         const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx); rg.addColorStop(0, '#000'); rg.addColorStop(solidTo, solidTo > 0.5 ? '#000' : 'rgba(0,0,0,0.8)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
@@ -232,6 +239,12 @@
       }
       const fy0 = oy + bh * (f.artFade || 0.86) - bh * 0.1, lg = g.createLinearGradient(0, fy0, 0, oy + bh); lg.addColorStop(0, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = lg; g.fillRect(0, 0, W2, H2);   // whole canvas: the gradient holds solid above the fade and clear below it
+      if (wideOn) {
+        // behind the text the painting settles back a little, so the type stays easy to read on it
+        const tx0 = (innerWidth * 0.5 - sbox.left) * D, tx1 = (innerWidth * 0.63 - sbox.left) * D;
+        const vg = g.createLinearGradient(tx0, 0, tx1, 0); vg.addColorStop(0, 'rgba(12,10,10,0)'); vg.addColorStop(1, 'rgba(12,10,10,0.5)');
+        g.globalCompositeOperation = 'source-atop'; g.fillStyle = vg; g.fillRect(0, 0, W2, H2);
+      }
       g.globalCompositeOperation = 'source-over';
     }
     const sceneShow = v => { if (!scn) return; const on = sceneOn && v > 0.002; scn.style.visibility = on ? 'visible' : 'hidden'; scn.style.opacity = on ? (v * (1 - 0.6 * find)).toFixed(3) : 0; };
