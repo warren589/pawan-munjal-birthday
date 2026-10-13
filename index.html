@@ -24,7 +24,7 @@
 
 <header class="top">
   <a class="mark" href="#top" aria-label="Back to the beginning">Your Dr. Pawan Munjal <span>· A Portrait in Words</span></a>
-  <button class="link js-write" type="button">Write a message</button>
+  <button class="link js-write top__write" type="button" tabindex="-1" aria-hidden="true">Write a message</button>   <!-- shown only at the end, once every facet has been seen -->
 </header>
 
 <nav class="rail" aria-label="Facets"></nav>
@@ -45,7 +45,6 @@
         <p class="eyebrow">Celebrating the Life and Leadership of Our Chairman</p>
         <h1>How do you see <em>Dr.&nbsp;Pawan Munjal?</em></h1>
         <p class="lede">Every word in this portrait reflects a life he has touched, a moment he has inspired, or a memory someone holds dear. Now, it’s your turn to share your story.. Share the words, memories, and moments that define what he means to you.</p>
-        <button class="btn js-write" type="button">Write your message</button>
         <p class="count"><span class="js-count">2,418</span> voices so far</p>
       </div>
     </section>
@@ -109,6 +108,11 @@
       <textarea name="msg" rows="5" maxlength="400" placeholder="A memory, a lesson, a quality you admire…" required></textarea>
     </div>
     <p class="found" aria-live="polite"></p>
+    <div class="media">
+      <label class="media__add"><input type="file" name="media" accept="image/*,video/*"><span>Add a photo or video</span> <i>(optional)</i></label>
+      <div class="media__item" hidden><div class="media__thumb"></div><span class="media__name"></span><button class="link js-media-x" type="button">Remove</button></div>
+      <p class="media__err" aria-live="polite"></p>
+    </div>
     <div class="two">
       <label><span>Name <i>(optional)</i></span><input name="name" autocomplete="name"></label>
       <label><span>Connection <i>(optional)</i></span><input name="rel" placeholder="Colleague, student, friend…"></label>

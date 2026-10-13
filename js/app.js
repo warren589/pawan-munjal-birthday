@@ -899,7 +899,7 @@
     return `
       <p class="eyebrow">${codes.map(c => FACETS[CODES.indexOf(c)].name).join(' · ')}</p>
       <h3 id="sheet-word" class="${m.mine ? 'mine' : ''}">${esc(word)}</h3>
-      <blockquote${m.mine ? ' class="pending"' : ''}><p>“${text}”</p>
+      <blockquote${m.mine ? ' class="pending"' : ''}><p>“${text}”</p>${m.media ? mediaTag(m.media, 'quote__media') : ''}
         <cite>${esc(m.name || 'Anonymous')}${m.rel ? `<span>${esc(m.rel)}</span>` : ''}</cite></blockquote>
       ${m.mine ? '<p class="fine">Your message · only you can see it until it has been approved.</p>' : ''}
       ${rel.length ? `<p class="eyebrow">Also said by</p><ul class="rel">${rel.map(i => `<li><button type="button" data-i="${i}">“${esc(messages[i].text)}” <span>${esc(messages[i].name)}</span></button></li>`).join('')}</ul>` : ''}`;
@@ -953,6 +953,33 @@
     clearTimeout(composer._t); composer._t = setTimeout(() => { composer.hidden = true; }, 500);
   }
   $$('.js-write').forEach(b => b.addEventListener('click', openComposer));
+  // the write link in the header only appears at the end: on the closing portrait and the messages, after every facet
+  const topWrite = $('.top__write');
+  const syncWrite = () => { const on = body.dataset.state === 'final' || body.classList.contains('on-board'); topWrite.classList.toggle('on', on); topWrite.tabIndex = on ? 0 : -1; topWrite.setAttribute('aria-hidden', on ? 'false' : 'true'); };
+  new MutationObserver(syncWrite).observe(body, { attributes: true, attributeFilter: ['data-state', 'class'] }); syncWrite();
+
+  // a photo or a video with the message (optional): previewed in the box, then shown with the letter on the wall
+  const mediaIn = form.elements.media, mediaItem = $('.media__item', form), mediaAdd = $('.media__add', form), mediaErr = $('.media__err', form);
+  const MAX_IMG = 20, MAX_VID = 200;   // MB
+  let media = null;
+  const mediaTag = (md, cls) => md.type === 'video'
+    ? `<video class="${cls}" src="${md.url}" controls playsinline preload="metadata"></video>`
+    : `<img class="${cls}" src="${md.url}" alt="${esc(md.name)}">`;
+  function clearMedia(revoke) {
+    if (media && revoke) URL.revokeObjectURL(media.url);
+    media = null; mediaIn.value = ''; mediaItem.hidden = true; mediaAdd.hidden = false; $('.media__thumb', form).innerHTML = '';
+  }
+  mediaIn.addEventListener('change', () => {
+    const f = mediaIn.files[0]; mediaErr.textContent = ''; if (!f) return;
+    const type = f.type.startsWith('video/') ? 'video' : f.type.startsWith('image/') ? 'image' : '';
+    if (!type) { mediaErr.textContent = 'Please choose a photo or a video.'; mediaIn.value = ''; return; }
+    if (f.size > (type === 'video' ? MAX_VID : MAX_IMG) * 1048576) { mediaErr.textContent = `That file is too large: ${type === 'video' ? 'videos' : 'photos'} can be up to ${type === 'video' ? MAX_VID : MAX_IMG} MB.`; mediaIn.value = ''; return; }
+    clearMedia(true);
+    media = { type, url: URL.createObjectURL(f), name: f.name };
+    $('.media__thumb', form).innerHTML = media.type === 'video' ? `<video src="${media.url}" muted playsinline preload="metadata"></video>` : `<img src="${media.url}" alt="">`;
+    $('.media__name', form).textContent = f.name; mediaItem.hidden = false; mediaAdd.hidden = true;
+  });
+  $('.js-media-x', form).addEventListener('click', () => { clearMedia(true); mediaErr.textContent = ''; });
   composer.addEventListener('click', e => { if (e.target.closest('.js-close')) closeComposer(); });
   $('.js-sample').addEventListener('click', () => {
     ta.value = 'Your vision and humility inspired me to lead with courage. Thank you for believing in young people like me, and for every lesson along the way.';
@@ -967,7 +994,7 @@
     e.preventDefault();
     const text = ta.value.trim(); if (text.length < 3) { ta.classList.add('err'); ta.focus(); return; }
     const ex = extract(text);
-    const m = { text, name: form.elements.name.value.trim(), rel: form.elements.rel.value.trim(), words: ex.words, mine: true, facets: new Set(ex.words.flatMap(w => facetsOf(w, ex.fallback))) };
+    const m = { text, name: form.elements.name.value.trim(), rel: form.elements.rel.value.trim(), words: ex.words, mine: true, facets: new Set(ex.words.flatMap(w => facetsOf(w, ex.fallback))), media };
     messages.push(m); const mi = messages.length - 1;
     ex.words.forEach(w => used.add(w));
 
@@ -1049,7 +1076,7 @@
             f.fl.animate([{ opacity: f.inHere ? 1 : 0 }, { opacity: 0 }], { duration: 320, fill: 'forwards' }).onfinish = () => f.fl.remove();
             if (--left === 0) {
               svg.remove(); done(entries); closeComposer();
-              setTimeout(() => { form.reset(); preview.innerHTML = ''; found.textContent = ''; composer.classList.remove('sending', 'emptied'); }, 520);
+              setTimeout(() => { form.reset(); clearMedia(false); mediaErr.textContent = ''; preview.innerHTML = ''; found.textContent = ''; composer.classList.remove('sending', 'emptied'); }, 520);   // (the file stays: the letter shows it)
             }
           }
         }
@@ -1127,7 +1154,7 @@
       const paras = m.paras || [m.text], sig = `<p class="wcard__sig">— ${esc(m.name || 'Anonymous')}</p>${m.rel ? `<p class="wcard__rel">${esc(m.rel)}${m.mine ? ' · <em>pending approval</em>' : ''}</p>` : ''}`;
       return `<article class="wcard${deco ? ' deco' : ''}${m.mine ? ' mine' : ''}"${deco ? ' aria-hidden="true"' : ''}>
         <div class="wcard__bg"></div>
-        <div class="wcard__full"><div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}${sig}</div></div>
+        <div class="wcard__full"><div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p>${paras.map(p => `<p class="wcard__t">${esc(p)}</p>`).join('')}${m.media && !deco ? mediaTag(m.media, 'wcard__media') : ''}${sig}</div></div>
         <div class="wcard__short" aria-hidden="true"><div class="wcard__body"><p class="wcard__to">Dear Dr. Munjal,</p><p class="wcard__t clamp">${esc(paras[0])}</p>${sig}</div></div>
       </article>`;
     }
