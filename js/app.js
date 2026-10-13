@@ -953,6 +953,18 @@
     clearTimeout(composer._t); composer._t = setTimeout(() => { composer.hidden = true; }, 500);
   }
   $$('.js-write').forEach(b => b.addEventListener('click', openComposer));
+  // while the message box is open the page stays where it is: no scrolling back up to the splash or on to the messages
+  // (the message itself still scrolls when it is long)
+  const scrollsInside = (t, dy) => { const a = t.closest && t.closest('textarea'); return a && a.scrollHeight > a.clientHeight + 1 && (dy < 0 ? a.scrollTop > 0 : a.scrollTop + a.clientHeight < a.scrollHeight - 1); };
+  addEventListener('wheel', e => { if (body.classList.contains('composing') && !scrollsInside(e.target, e.deltaY)) e.preventDefault(); }, { passive: false });
+  let touchY = 0;
+  addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+  addEventListener('touchmove', e => { if (!body.classList.contains('composing')) return; const dy = touchY - e.touches[0].clientY; touchY = e.touches[0].clientY; if (!scrollsInside(e.target, dy)) e.preventDefault(); }, { passive: false });
+  addEventListener('keydown', e => {
+    if (!body.classList.contains('composing')) return;
+    const field = e.target.closest('textarea, input');   // in a field these keys type or move the caret, except the page keys
+    if (field ? e.key === 'PageUp' || e.key === 'PageDown' : [' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
+  });
   // the write link in the header only appears at the end: on the closing portrait and the messages, after every facet
   const topWrite = $('.top__write');
   const syncWrite = () => { const on = body.dataset.state === 'final' || body.classList.contains('on-board'); topWrite.classList.toggle('on', on); topWrite.tabIndex = on ? 0 : -1; topWrite.setAttribute('aria-hidden', on ? 'false' : 'true'); };
